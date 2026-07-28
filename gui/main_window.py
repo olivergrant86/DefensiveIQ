@@ -62,3 +62,6 @@ class MainWindow(QMainWindow):
         dock.setWidget(LogPanel())
 
         self.addDockWidget(Qt.RightDockWidgetArea, dock)
+        self.import_action = QAction("Open Playlist", self)
+
+self.toolbar.addAction(self.import_action)

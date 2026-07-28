@@ -1,8 +1,8 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 
-@dataclass
+@dataclass(slots=True)
 class Play:
     play_number: int = 0
 
@@ -40,9 +40,12 @@ class Play:
     goal_line: bool = False
 
     notes: str = ""
-    @dataclass
+
+
+@dataclass(slots=True)
 class AnalyticsSummary:
     total_plays: int = 0
+
     runs: int = 0
     passes: int = 0
 
@@ -54,3 +57,7 @@ class AnalyticsSummary:
     explosive_plays: int = 0
 
     success_rate: float = 0.0
+
+    formations: dict = field(default_factory=dict)
+    personnel: dict = field(default_factory=dict)
+    motions: dict = field(default_factory=dict)
