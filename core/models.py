@@ -40,3 +40,17 @@ class Play:
     goal_line: bool = False
 
     notes: str = ""
+    @dataclass
+class AnalyticsSummary:
+    total_plays: int = 0
+    runs: int = 0
+    passes: int = 0
+
+    run_pct: float = 0.0
+    pass_pct: float = 0.0
+
+    avg_gain: float = 0.0
+
+    explosive_plays: int = 0
+
+    success_rate: float = 0.0
