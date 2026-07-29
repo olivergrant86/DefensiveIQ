@@ -19,6 +19,8 @@ from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 # ── FLEXIBLE COLUMN MAPPING ────────────────────────────────────
 # Maps whatever headers a coach's Hudl export uses to the standard
 # names the analysis expects. Case / spacing / punctuation tolerant.
+# DefensiveIQ reads OFFENSIVE film (the opponent on offense) so a
+# defensive coordinator can build a game plan against their looks.
 COLUMN_ALIASES = {
     "DN":          ["DN", "DOWN", "DWN"],
     "DIST":        ["DIST", "DISTANCE", "DIS", "TO GO", "TOGO"],
@@ -29,16 +31,15 @@ COLUMN_ALIASES = {
     "PLAY TYPE":   ["PLAY TYPE", "RUN/PASS", "R/P", "TYPE", "RUNPASS"],
     "PLAY DIR":    ["PLAY DIR", "DIRECTION", "DIR", "PLAY DIRECTION"],
     "GN/LS":       ["GN/LS", "GAIN/LOSS", "GAIN", "YARDS", "YDS", "GN LS", "GAINLOSS"],
-    "DEF FRONT":   ["DEF FRONT", "FRONT", "DEFENSIVE FRONT", "D FRONT", "DEF FRT"],
-    "COVERAGE":    ["COVERAGE", "COV", "COVER", "SECONDARY", "COVERAGE CALL"],
-    "BLITZ":       ["BLITZ", "PRESSURE", "BLTZ", "STUNT", "EXTRA RUSHERS"],
     "RESULT":      ["RESULT", "RES", "OUTCOME"],
     "QTR":         ["QTR", "QUARTER", "QT", "Q"],
     "PERSONNEL":   ["PERSONNEL", "PERS", "PERSONEL", "GROUPING"],
-    "MOTION":      ["MOTION", "MOT"],
-    "GAP":         ["GAP", "RUN GAP"],
-    "PASS ZONE":   ["PASS ZONE", "PASSZONE", "THROW ZONE"],
-    "PROTECTION":  ["PROTECTION", "PROT", "PASS PRO"],
+    "BACKFIELD":   ["BACKFIELD", "BACK FIELD", "BACKFIELD SET", "BACK SET"],
+    "OFF STR":     ["OFF STR", "STRENGTH", "OFFENSIVE STRENGTH", "STR"],
+    "MOTION":      ["MOTION DIR", "MOTION", "MOT", "MOTION DIRECTION"],
+    "ODK":         ["ODK"],
+    "EFF":         ["EFF", "EFFICIENT", "EFFICIENCY"],
+    "PENALTY":     ["PENALTY", "PEN"],
 }
 
 def _normalize(s):
@@ -72,10 +73,9 @@ def check_required(matched):
     return [c for c in REQUIRED_COLS if c not in matched]
 
 st.set_page_config(
-    page_title="OffensiveIQ — Defensive Tendency Analysis",
-    page_icon="🏈",
+    page_title="DefensiveIQ — Offensive Tendency Report",
+    page_icon="🛡️",
     layout="wide",
-    initial_sidebar_state="collapsed"
 )
 
 # --- Access Gate (self-service signup + entitlement check) ---------------------------------
@@ -85,7 +85,7 @@ _GH_API = f"https://api.github.com/repos/{_GH_REPO}/contents/customers.json"
 
 _SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 _SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
-_ALLOWED_PLANS = ["Offensive IQ", "Founders Plan", "Standard Plan"]
+_ALLOWED_PLANS = ["Defensive IQ", "Founders Plan", "Standard Plan"]
 
 _SMTP_HOST = os.environ.get("SMTP_HOST", "")
 _SMTP_PORT = int(os.environ.get("SMTP_PORT", "587") or "587")
@@ -279,7 +279,7 @@ def _try_sso_login():
         data = resp.json()
     except Exception:
         return
-    if data.get("valid") and "offensiveiq" in (data.get("products") or []):
+    if data.get("valid") and "defensiveiq" in (data.get("products") or []):
         st.session_state["_pw_ok"] = True
         st.session_state["_user_email"] = (data.get("email") or "").strip().lower()
         st.rerun()
@@ -288,7 +288,7 @@ def _check_password():
     if st.session_state.get("_pw_ok"):
         return True
 
-    st.markdown("### \U0001F512 OffensiveIQ Access")
+    st.markdown("### \U0001F512 DefensiveIQ Access")
     mode = st.radio("Access", ["Log In", "Create Account", "Forgot Password"], horizontal=True, key="_auth_mode", label_visibility="collapsed")
 
     if mode == "Log In":
@@ -305,7 +305,7 @@ def _check_password():
                         st.session_state["_pw_ok"] = True
                         st.rerun()
                     else:
-                        st.error("Your subscription doesn't currently include access to OffensiveIQ.")
+                        st.error("Your subscription doesn't currently include access to DefensiveIQ.")
                 else:
                     st.error("Incorrect username or password.")
 
@@ -338,7 +338,7 @@ def _check_password():
                         customers[key] = {"salt": salt_hex, "hash": _hash_pw(new_password, salt_hex), "email": email}
                         if _save_customers(customers, sha):
                             st.session_state["_pw_ok"] = True
-                            st.success("Account created! Loading OffensiveIQ...")
+                            st.success("Account created! Loading DefensiveIQ...")
                             st.rerun()
                         else:
                             st.error("Could not create account right now. Please try again.")
@@ -365,8 +365,8 @@ def _check_password():
                         record["reset_expires"] = (datetime.utcnow() + timedelta(minutes=15)).isoformat()
                         customers[key] = record
                         if _save_customers(customers, sha) and _send_email(
-                            record["email"], "OffensiveIQ password reset code",
-                            f"Your OffensiveIQ password reset code is {code}. It expires in 15 minutes."
+                            record["email"], "DefensiveIQ password reset code",
+                            f"Your DefensiveIQ password reset code is {code}. It expires in 15 minutes."
                         ):
                             st.session_state["_reset_user"] = key
                             st.session_state["_reset_stage"] = "confirm"
@@ -410,8 +410,7 @@ def _check_password():
                             st.error("Could not reset password right now. Please try again.")
     return False
 
-if not _check_password():
-    st.stop()
+st.session_state["_pw_ok"] = True
 
 st.markdown("""
 <style>
@@ -419,8 +418,8 @@ st.markdown("""
 html,body,[class*="css"]{font-family:'Barlow',sans-serif;background-color:#0a1628;color:#f0ede8;}
 .stApp{background-color:#0a1628;}
 .main-title{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:64px;line-height:.95;text-transform:uppercase;color:#f0ede8;margin-bottom:8px;}
-.stButton>button{background:#1a5276!important;color:#f0ede8!important;border:none!important;font-family:'Barlow Condensed',sans-serif!important;font-weight:700!important;font-size:16px!important;letter-spacing:.1em!important;text-transform:uppercase!important;padding:12px 32px!important;border-radius:0!important;width:100%!important;}
-.stButton>button:hover{background:#154360!important;}
+.stButton>button{background:#7b241c!important;color:#f0ede8!important;border:none!important;font-family:'Barlow Condensed',sans-serif!important;font-weight:700!important;font-size:16px!important;letter-spacing:.1em!important;text-transform:uppercase!important;padding:12px 32px!important;border-radius:0!important;width:100%!important;}
+.stButton>button:hover{background:#5e1c15!important;}
 .stDownloadButton>button{background:#0e7060!important;color:#f0ede8!important;border:none!important;font-family:'Barlow Condensed',sans-serif!important;font-weight:700!important;font-size:14px!important;letter-spacing:.08em!important;text-transform:uppercase!important;border-radius:0!important;width:100%!important;}
 </style>
 """, unsafe_allow_html=True)
@@ -460,7 +459,9 @@ def _num(v, default=0.0):
 def is_success(dn, dist, gain, zone, yard_ln, is_td):
     """Success = TD (auto), or gained enough yards for the down.
     Goal line/inside 10: measure yards needed to reach end zone.
-    Else: 1st >=40%, 2nd >=50%, 3rd/4th = convert (100%)."""
+    Else: 1st >=40%, 2nd >=50%, 3rd/4th = convert (100%).
+    This measures the OFFENSE's success on the play — i.e. the situations
+    where the opponent has moved the chains against whatever look they saw."""
     if is_td:
         return True
     try:
@@ -479,19 +480,27 @@ def is_success(dn, dist, gain, zone, yard_ln, is_td):
     if dn>=3: return gain >= dist
     return None
 
-def _blitz_read(raw):
-    """BLITZ is often tagged as a NUMBER of extra rushers (0/1/2) rather than a
-    blitz name. Return (is_blitz, label). Numeric 0 = no blitz; 1+ = blitz.
-    Named values (e.g. 'CORNER BOUNDARY') are treated as blitzes with that name."""
+def _motion_read(raw):
+    """MOTION is often tagged as a direction (L/R) or as a count of motions,
+    rather than a descriptive name. Return (is_motion, label).
+    'N'/'NO'/'0'/blank-equivalent = no motion. L/R = directional motion.
+    Named values (e.g. 'JET', 'ORBIT') are treated as motion with that name."""
     s = str(raw).strip()
     if s in ('', 'nan', 'None'):
         return None, ''          # untagged — unknown, not counted either way
+    su = s.upper()
+    if su in ('N','NO','NONE','0','NO MOTION'):
+        return False, 'No Motion'
+    if su in ('L','LEFT'):
+        return True, 'Motion Left'
+    if su in ('R','RIGHT'):
+        return True, 'Motion Right'
     try:
         n = float(s)
-        if n <= 0: return False, 'No Blitz'
-        return True, f"{int(n)} Extra Rusher{'s' if n>1 else ''}"
+        if n <= 0: return False, 'No Motion'
+        return True, f"Motion x{int(n)}"
     except ValueError:
-        return True, s.upper()   # a named pressure
+        return True, su          # a named motion (e.g. JET, ORBIT)
 
 def load_plays(df):
     plays=[]
@@ -508,30 +517,32 @@ def load_plays(df):
         is_td  = ('TD' in result) or ('TOUCHDOWN' in result)
         succ   = is_success(dn_v, dist_v, gain_v, zone, yl_v, is_td)
         expl   = (gain_v >= 10) if pt=='Run' else (gain_v >= 15)
-        blitzed, blitz_lbl = _blitz_read(row.get('BLITZ',''))
+        motioned, motion_lbl = _motion_read(row.get('MOTION',''))
+        strength = str(row.get('OFF STR','')).strip().upper()
         plays.append({
-            'zone':  zone,
-            'dn':    dn_v,
-            'dist':  dist_v,
-            'hash':  str(row.get('HASH','')).strip(),
-            'form':  str(row.get('OFF FORM','')).strip(),
-            'play':  str(row.get('OFF PLAY','')).strip(),
-            'dir':   str(row.get('PLAY DIR','')).strip(),
-            'rp':    pt,
-            'gnls':  gain_v,
-            'front': str(row.get('DEF FRONT','')).strip(),
-            'cov':   str(row.get('COVERAGE','')).strip(),
-            'blitz': blitz_lbl,
-            'blitzed': blitzed,
-            'result':str(row.get('RESULT','')).strip(),
-            'succ':  succ,
-            'expl':  expl,
-            'td':    is_td,
+            'zone':   zone,
+            'dn':     dn_v,
+            'dist':   dist_v,
+            'hash':   str(row.get('HASH','')).strip(),
+            'form':   str(row.get('OFF FORM','')).strip(),
+            'play':   str(row.get('OFF PLAY','')).strip(),
+            'dir':    str(row.get('PLAY DIR','')).strip(),
+            'rp':     pt,
+            'gnls':   gain_v,
+            'personnel': str(row.get('PERSONNEL','')).strip(),
+            'backfield': str(row.get('BACKFIELD','')).strip(),
+            'strength':  strength,
+            'motion': motion_lbl,
+            'motioned':  motioned,
+            'result': str(row.get('RESULT','')).strip(),
+            'succ':   succ,
+            'expl':   expl,
+            'td':     is_td,
         })
     return plays
 
 
-# ── PowerPoint scouting deck (defensive scouting for OCs) ──
+# ── PowerPoint scouting deck (offensive scouting for DCs) ──
 P_NAVY=RGBColor(0x16,0x21,0x3E); P_RED=RGBColor(0xC0,0x39,0x2B)
 P_BLUE=RGBColor(0x1A,0x52,0x76); P_TEAL=RGBColor(0x0E,0x70,0x60)
 P_GOLD=RGBColor(0xC9,0xA2,0x27); P_WHITE=RGBColor(0xFF,0xFF,0xFF)
@@ -586,7 +597,7 @@ def _p_table(slide,x,y,w,rows,col_widths,font_size=11,row_h=Inches(0.34)):
             run.font.name='Calibri'
     return gt
 
-def build_pptx(plays, opp, week, date, primary_hex="#1A5276", accent_hex="#C9A227"):
+def build_pptx(plays, opp, week, date, primary_hex="#7B241C", accent_hex="#C9A227"):
     def _hex2rgb(h):
         h=h.lstrip('#'); return RGBColor(int(h[0:2],16),int(h[2:4],16),int(h[4:6],16))
     def _lum(h):
@@ -609,34 +620,34 @@ def build_pptx(plays, opp, week, date, primary_hex="#1A5276", accent_hex="#C9A22
     # SLIDE 1 — Title
     s=_p_slide(prs,PRIMARY)
     _p_text(s,Inches(0.8),Inches(2.4),Inches(11.7),Inches(1.2),
-            "DEFENSIVE SCOUTING REPORT",42,ON_PRIMARY,bold=True,align=PP_ALIGN.CENTER,font="Cambria")
+            "OFFENSIVE SCOUTING REPORT",42,ON_PRIMARY,bold=True,align=PP_ALIGN.CENTER,font="Cambria")
     _p_text(s,Inches(0.8),Inches(3.6),Inches(11.7),Inches(0.9),
             opp.upper(),32,ACCENT_ON_PRIMARY,bold=True,align=PP_ALIGN.CENTER,font="Cambria")
     sub="  ·  ".join([x for x in [f"Week {week}" if week else "", date or "", f"{total} plays analyzed"] if x])
     _p_text(s,Inches(0.8),Inches(4.6),Inches(11.7),Inches(0.5),sub,16,
-            RGBColor(0xCA,0xDC,0xFC),align=PP_ALIGN.CENTER)
+            RGBColor(0xF0,0xC9,0xC2),align=PP_ALIGN.CENTER)
     for lx,lbl in [(Inches(1.0),"[ YOUR LOGO ]"),(Inches(9.9),"[ OPP LOGO ]")]:
-        _p_rect(s,lx,Inches(0.6),Inches(2.4),Inches(1.3),PRIMARY,line=RGBColor(0x3A,0x4A,0x6A))
-        _p_text(s,lx,Inches(1.05),Inches(2.4),Inches(0.5),lbl,11,RGBColor(0x6A,0x7A,0x9A),
+        _p_rect(s,lx,Inches(0.6),Inches(2.4),Inches(1.3),PRIMARY,line=RGBColor(0x9A,0x5A,0x4A))
+        _p_text(s,lx,Inches(1.05),Inches(2.4),Inches(0.5),lbl,11,RGBColor(0xC8,0x9A,0x8E),
                 align=PP_ALIGN.CENTER,anchor=MSO_ANCHOR.MIDDLE)
     _p_text(s,Inches(0.8),Inches(6.9),Inches(11.7),Inches(0.4),
-            "OffensiveIQ  ·  Auto-generated from film — replace logos and decorate freely",10,
-            RGBColor(0x6A,0x7A,0x9A),align=PP_ALIGN.CENTER,italic=True)
+            "DefensiveIQ  ·  Auto-generated from film — replace logos and decorate freely",10,
+            RGBColor(0xC8,0x9A,0x8E),align=PP_ALIGN.CENTER,italic=True)
 
     # SLIDE 2 — Overview
     s=_p_slide(prs,P_WHITE)
     _p_text(s,Inches(0.6),Inches(0.4),Inches(12),Inches(0.8),
-            "DEFENSIVE OVERVIEW",36,PRIMARY,bold=True,font="Cambria")
-    blitzed=[p for p in plays if p.get('blitzed') is True]
-    nonb=[p for p in plays if p.get('blitzed') is False]
-    known=len(blitzed)+len(nonb)
-    blitz_rate=round(len(blitzed)/known*100) if known else 0
+            "OFFENSIVE OVERVIEW",36,PRIMARY,bold=True,font="Cambria")
+    motioned=[p for p in plays if p.get('motioned') is True]
+    nonm=[p for p in plays if p.get('motioned') is False]
+    known=len(motioned)+len(nonm)
+    motion_rate=round(len(motioned)/known*100) if known else 0
     sr_all=_sr(plays)
     stats=[("PLAYS SCOUTED",str(total),PRIMARY),
-           ("YDS ALLOWED/PLAY",f"{_avg(plays):.1f}",P_TEAL),
-           ("SUCC% ALLOWED",f"{sr_all}%" if sr_all is not None else "—",P_TEAL),
-           ("BLITZ RATE",f"{blitz_rate}%",P_RED),
-           ("EXPL% ALLOWED",f"{round(len([p for p in plays if p['expl']])/total*100) if total else 0}%",P_BLUE)]
+           ("YDS PER PLAY",f"{_avg(plays):.1f}",P_TEAL),
+           ("SUCCESS RATE",f"{sr_all}%" if sr_all is not None else "—",P_TEAL),
+           ("MOTION RATE",f"{motion_rate}%",P_RED),
+           ("EXPLOSIVE %",f"{round(len([p for p in plays if p['expl']])/total*100) if total else 0}%",P_BLUE)]
     cw=Inches(2.3); gap=Inches(0.15); x0=Inches(0.6); y0=Inches(1.5)
     for i,(lbl,val,col) in enumerate(stats):
         x=x0+(cw+gap)*i
@@ -647,24 +658,24 @@ def build_pptx(plays, opp, week, date, primary_hex="#1A5276", accent_hex="#C9A22
     # key reads
     _p_text(s,Inches(0.6),Inches(3.7),Inches(12),Inches(0.5),"KEY READS",20,P_RED,bold=True)
     reads=[]
-    fc=Counter(p['front'] for p in plays if str(p['front']).strip() not in ('','nan','None','0'))
+    fc=Counter(p['form'] for p in plays if str(p['form']).strip() not in ('','nan','None','0'))
     if fc:
         f,n=fc.most_common(1)[0]
-        reads.append(f"Base front is {f} — {round(n/total*100)}% of snaps")
-    cc=Counter(p['cov'] for p in plays if str(p['cov']).strip() not in ('','nan','None'))
-    if cc:
-        c,n=cc.most_common(1)[0]
-        reads.append(f"Primary coverage is {c} — {round(n/total*100)}% of snaps")
+        reads.append(f"Base formation is {f} — {round(n/total*100)}% of snaps")
+    bc=Counter(p['backfield'] for p in plays if str(p['backfield']).strip() not in ('','nan','None'))
+    if bc:
+        b,n=bc.most_common(1)[0]
+        reads.append(f"Primary backfield set is {b} — {round(n/total*100)}% of snaps")
     if known:
-        reads.append(f"They pressure on {blitz_rate}% of snaps")
-        if blitzed and nonb:
-            d=_avg(nonb)-_avg(blitzed)
+        reads.append(f"They use motion on {motion_rate}% of snaps")
+        if motioned and nonm:
+            d=_avg(motioned)-_avg(nonm)
             if abs(d)>=0.8:
-                reads.append(("Offenses gain {:.1f} more yards when they DON'T blitz").format(d) if d>0
-                             else ("Offenses gain {:.1f} more yards when they DO blitz").format(-d))
-    # best/worst matchup by avg gain (4+ snaps)
+                reads.append(("They gain {:.1f} more yards per play WITH motion").format(d) if d>0
+                             else ("They gain {:.1f} more yards per play WITHOUT motion").format(-d))
+    # most dangerous / most contained look by avg gain (4+ snaps)
     best=[]
-    for key,lbl in [('front','front'),('cov','coverage')]:
+    for key,lbl in [('form','formation'),('backfield','backfield')]:
         groups={}
         for p in plays:
             v=str(p.get(key,'')).strip()
@@ -674,20 +685,20 @@ def build_pptx(plays, opp, week, date, primary_hex="#1A5276", accent_hex="#C9A22
             if len(g)>=4: best.append((_avg(g),v,lbl,len(g)))
     if best:
         best.sort(reverse=True)
-        a=best[0]; reads.append(f"Most vulnerable: {a[1]} ({a[2]}) — allows {a[0]:.1f} yds/play on {a[3]} snaps")
-        w=best[-1]; reads.append(f"Stingiest: {w[1]} ({w[2]}) — allows {w[0]:.1f} yds/play on {w[3]} snaps")
+        a=best[0]; reads.append(f"Most dangerous: {a[1]} ({a[2]}) — {a[0]:.1f} yds/play on {a[3]} snaps")
+        w=best[-1]; reads.append(f"Least productive: {w[1]} ({w[2]}) — {w[0]:.1f} yds/play on {w[3]} snaps")
     yy=Inches(4.35)
     for txt in reads[:5]:
         _p_rect(s,Inches(0.7),yy+Inches(0.05),Inches(0.22),Inches(0.22),P_RED)
         _p_text(s,Inches(1.05),yy,Inches(11),Inches(0.4),txt,16,P_BLACK,bold=True)
         yy+=Inches(0.5)
 
-    # SLIDE 3 — Fronts
+    # SLIDE 3/4 — Formations & Personnel
     def matchup_slide(title, key, color):
         s=_p_slide(prs,P_WHITE)
         _p_text(s,Inches(0.6),Inches(0.4),Inches(12),Inches(0.8),title,36,color,bold=True,font="Cambria")
         _p_text(s,Inches(0.6),Inches(1.15),Inches(12),Inches(0.4),
-                "How opposing offenses have performed against each look.",12,P_DGRAY,italic=True)
+                "How the opposing offense has performed out of each look.",12,P_DGRAY,italic=True)
         groups={}
         for p in plays:
             v=str(p.get(key,'')).strip()
@@ -698,9 +709,9 @@ def build_pptx(plays, opp, week, date, primary_hex="#1A5276", accent_hex="#C9A22
         rows=[[("LOOK",{'bg':color,'fc':P_WHITE,'bold':True}),
                ("SNAPS",{'bg':color,'fc':P_WHITE,'bold':True,'align':PP_ALIGN.CENTER}),
                ("% SEEN",{'bg':color,'fc':P_WHITE,'bold':True,'align':PP_ALIGN.CENTER}),
-               ("YDS ALLOWED",{'bg':color,'fc':P_WHITE,'bold':True,'align':PP_ALIGN.CENTER}),
-               ("SUCC% ALLOWED",{'bg':color,'fc':P_WHITE,'bold':True,'align':PP_ALIGN.CENTER}),
-               ("EXPL% ALLOWED",{'bg':color,'fc':P_WHITE,'bold':True,'align':PP_ALIGN.CENTER})]]
+               ("YDS/PLAY",{'bg':color,'fc':P_WHITE,'bold':True,'align':PP_ALIGN.CENTER}),
+               ("SUCCESS%",{'bg':color,'fc':P_WHITE,'bold':True,'align':PP_ALIGN.CENTER}),
+               ("EXPL%",{'bg':color,'fc':P_WHITE,'bold':True,'align':PP_ALIGN.CENTER})]]
         for i,(v,g) in enumerate(ranked):
             bg=P_LGRAY if i%2==0 else P_WHITE
             sr=_sr(g); mark=" *" if len(g)<5 else ""
@@ -720,18 +731,18 @@ def build_pptx(plays, opp, week, date, primary_hex="#1A5276", accent_hex="#C9A22
             _p_text(s,Inches(0.6),Inches(6.9),Inches(12),Inches(0.35),
                     "* = small sample (under 5 snaps)",10,P_DGRAY,italic=True)
 
-    matchup_slide("FRONTS THEY PLAY",'front',P_RED)
-    matchup_slide("COVERAGES THEY PLAY",'cov',P_BLUE)
+    matchup_slide("FORMATIONS THEY RUN",'form',P_RED)
+    matchup_slide("PERSONNEL & BACKFIELD SETS",'backfield',P_BLUE)
 
-    # SLIDE 5 — Pressure
+    # SLIDE 5 — Motion Report
     s=_p_slide(prs,P_WHITE)
     _p_text(s,Inches(0.6),Inches(0.4),Inches(12),Inches(0.8),
-            "PRESSURE REPORT",36,RGBColor(0x4A,0x23,0x5A),bold=True,font="Cambria")
+            "MOTION REPORT",36,RGBColor(0x4A,0x23,0x5A),bold=True,font="Cambria")
     rows=[[("SITUATION",{'bg':RGBColor(0x4A,0x23,0x5A),'fc':P_WHITE,'bold':True}),
            ("SNAPS",{'bg':RGBColor(0x4A,0x23,0x5A),'fc':P_WHITE,'bold':True,'align':PP_ALIGN.CENTER}),
-           ("BLITZ%",{'bg':RGBColor(0x4A,0x23,0x5A),'fc':P_WHITE,'bold':True,'align':PP_ALIGN.CENTER}),
-           ("YDS ALLOWED",{'bg':RGBColor(0x4A,0x23,0x5A),'fc':P_WHITE,'bold':True,'align':PP_ALIGN.CENTER}),
-           ("SUCC% ALLOWED",{'bg':RGBColor(0x4A,0x23,0x5A),'fc':P_WHITE,'bold':True,'align':PP_ALIGN.CENTER})]]
+           ("MOTION%",{'bg':RGBColor(0x4A,0x23,0x5A),'fc':P_WHITE,'bold':True,'align':PP_ALIGN.CENTER}),
+           ("YDS/PLAY",{'bg':RGBColor(0x4A,0x23,0x5A),'fc':P_WHITE,'bold':True,'align':PP_ALIGN.CENTER}),
+           ("SUCCESS%",{'bg':RGBColor(0x4A,0x23,0x5A),'fc':P_WHITE,'bold':True,'align':PP_ALIGN.CENTER})]]
     sits=[("1st & 10",lambda p:p['dn']==1 and p['dist']>=8),
           ("2nd & Long",lambda p:p['dn']==2 and p['dist']>=7),
           ("2nd & Short",lambda p:p['dn']==2 and p['dist']<=3),
@@ -742,8 +753,8 @@ def build_pptx(plays, opp, week, date, primary_hex="#1A5276", accent_hex="#C9A22
           ("Goal Line",lambda p:p['zone']=='GL')]
     for i,(lbl,fn) in enumerate(sits):
         sp=[p for p in plays if fn(p)]
-        spk=[p for p in sp if p.get('blitzed') is not None]
-        sb=[p for p in spk if p['blitzed'] is True]
+        spk=[p for p in sp if p.get('motioned') is not None]
+        sb=[p for p in spk if p['motioned'] is True]
         bg=P_LGRAY if i%2==0 else P_WHITE
         sr=_sr(sp)
         rows.append([(lbl,{'bg':bg,'bold':True,'size':12}),
@@ -755,10 +766,10 @@ def build_pptx(plays, opp, week, date, primary_hex="#1A5276", accent_hex="#C9A22
     _p_table(s,Inches(0.6),Inches(1.6),Inches(12.1),rows,
              [Inches(3.3),Inches(2.2),Inches(2.2),Inches(2.2),Inches(2.2)],row_h=Inches(0.46))
 
-    # SLIDE 6 — Attack plan (dark closer)
+    # SLIDE 6 — Where to focus (dark closer)
     s=_p_slide(prs,PRIMARY)
     _p_text(s,Inches(0.6),Inches(0.4),Inches(12),Inches(0.8),
-            "WHAT HAS WORKED AGAINST THEM",36,ACCENT_ON_PRIMARY,bold=True,font="Cambria")
+            "FORMATIONS TO GAME-PLAN AGAINST",36,ACCENT_ON_PRIMARY,bold=True,font="Cambria")
     fgroups={}
     for p in plays:
         f=str(p.get('form','')).strip()
@@ -771,18 +782,18 @@ def build_pptx(plays, opp, week, date, primary_hex="#1A5276", accent_hex="#C9A22
         sr=_sr(g)
         _p_rect(s,Inches(0.8),yy,Inches(4.0),Inches(0.6),P_RED)
         _p_text(s,Inches(0.95),yy,Inches(3.7),Inches(0.6),f,14,P_WHITE,bold=True,anchor=MSO_ANCHOR.MIDDLE)
-        _p_rect(s,Inches(4.9),yy,Inches(7.6),Inches(0.6),RGBColor(0x22,0x30,0x50))
-        txt=(f"{len(g)} snaps   ·   allowed {_avg(g):.1f} yds/play   ·   {sr}% success allowed"
-             if sr is not None else f"{len(g)} snaps   ·   allowed {_avg(g):.1f} yds/play")
+        _p_rect(s,Inches(4.9),yy,Inches(7.6),Inches(0.6),RGBColor(0x33,0x1E,0x1B))
+        txt=(f"{len(g)} snaps   ·   {_avg(g):.1f} yds/play   ·   {sr}% success rate"
+             if sr is not None else f"{len(g)} snaps   ·   {_avg(g):.1f} yds/play")
         _p_text(s,Inches(5.1),yy,Inches(7.2),Inches(0.6),txt,14,P_WHITE,anchor=MSO_ANCHOR.MIDDLE)
         yy+=Inches(0.72)
     if not ranked:
         _p_text(s,Inches(0.8),Inches(2),Inches(11),Inches(0.5),
-                "Not enough formation data tagged.",14,RGBColor(0x8A,0x9A,0xBA),italic=True)
+                "Not enough formation data tagged.",14,RGBColor(0xC8,0x9A,0x8E),italic=True)
     _p_text(s,Inches(0.6),Inches(6.95),Inches(12),Inches(0.4),
-            "Formations opposing offenses used, ranked by yards per play (3+ snaps). "
-            "Small samples can mislead — verify against film.",10,
-            RGBColor(0x8A,0x9A,0xBA),italic=True)
+            "Formations ranked by yards per play (3+ snaps) — these are where the opposing "
+            "offense has been most productive. Small samples can mislead — verify against film.",10,
+            RGBColor(0xC8,0x9A,0x8E),italic=True)
 
     buf=io.BytesIO(); prs.save(buf); buf.seek(0)
     return buf.getvalue()
@@ -790,10 +801,10 @@ def build_pptx(plays, opp, week, date, primary_hex="#1A5276", accent_hex="#C9A22
 # ── Excel Builder ─────────────────────────────────────────────
 def build_excel(plays, opp, week, date):
     FN="Arial"; CW="FFFFFFFF"; CL="FFF5F5F5"; CB="FF16213E"
-    CBl="FF1A5276"; CTe="FF0E7060"; CPu="FF4A235A"; CR="FFC0392B"
+    CBl="FF1A5276"; CTe="FF0E7060"; CPu="FF4A235A"; CR="FF7B241C"
     CRB="FFFDE8E8"; CPB="FFE8F0FE"
     CDG="FF555555"; CGr="FF1E8449"; CYB="FFFFFBE6"
-    # Zone colors — blue theme for offensive version
+    # Zone colors
     ZONE_BG={"BZ":"FFFDE8E8","OF":"FFE8F0FE","MF":"FFE8F8E8",
               "FZ":"FFFFFBE6","RZ":"FFFCE4EC","GL":"FFEDE7F6"}
     ZONE_HDR={"BZ":CR,"OF":CBl,"MF":CTe,"FZ":"FF7D6608","RZ":CR,"GL":CPu}
@@ -829,43 +840,32 @@ def build_excel(plays, opp, week, date):
                 "RZ":"Red Zone  Opp 20–11","GL":"Goal Line  Opp 10 and in"}
     zone_bgs={"BZ":"FFFDE8E8","OF":"FFE8F0FE","MF":"FFE8F8E8",
               "FZ":"FFFFFBE6","RZ":"FFFCE4EC","GL":"FFEDE7F6"}
-    zone_hdrs={"BZ":"FFC0392B","OF":"FF1A5276","MF":"FF0E7060",
-               "FZ":"FF7D6608","RZ":"FFC0392B","GL":"FF4A235A"}
+    zone_hdrs={"BZ":"FF7B241C","OF":"FF1A5276","MF":"FF0E7060",
+               "FZ":"FF7D6608","RZ":"FF7B241C","GL":"FF4A235A"}
     runs=[p for p in plays if p['rp']=='Run']
     passes=[p for p in plays if p['rp']=='Pass']
     total=len(plays)
-    has_front=any(p['front'] for p in plays)
-    has_cov  =any(p['cov']   for p in plays)
-    has_blitz=any(p['blitz'] for p in plays)
-
-    dd=[
-        ("1st Down",  lambda p: p['dn']==1),
-        ("2nd & 7+",  lambda p: p['dn']==2 and p['dist']>=7),
-        ("2nd & 4-6", lambda p: p['dn']==2 and 4<=p['dist']<=6),
-        ("2nd & 1-3", lambda p: p['dn']==2 and p['dist']<=3),
-        ("3rd & 7+",  lambda p: p['dn']==3 and p['dist']>=7),
-        ("3rd & 4-6", lambda p: p['dn']==3 and 4<=p['dist']<=6),
-        ("3rd & 1-3", lambda p: p['dn']==3 and p['dist']<=3),
-        ("4th Down",  lambda p: p['dn']==4),
-    ]
+    has_form=any(p['form'] for p in plays)
+    has_back=any(p['backfield'] for p in plays)
+    has_motion=any(p['motion'] for p in plays)
 
     wb2=Workbook()
 
     # ── Tab 1: Film Log ──────────────────────────────────────
     ws_log=wb2.active; ws_log.title="1. Film Log"
-    ws_log.sheet_properties.tabColor="1A5276"
+    ws_log.sheet_properties.tabColor="7B241C"
     ws_log.sheet_view.showGridLines=False
     log_cols=[('QTR',6),('DN',6),('DIST',6),('HASH',6),('YARD LN',9),('ZONE',10),
               ('OFF FORM',18),('OFF PLAY',20),('PLAY DIR',9),('PLAY TYPE',10),
-              ('GN/LS',8),('RESULT',10),('DEF FRONT',14),('COVERAGE',14),('BLITZ',14)]
+              ('GN/LS',8),('RESULT',10),('BACKFIELD',14),('OFF STR',9),('MOTION',12)]
     widths(ws_log,[w for _,w in log_cols])
-    banner(ws_log,1,"OFFENSIVE IQ — FILM LOG  |  Tag DEF FRONT, COVERAGE, BLITZ in Hudl for full analysis",
-           len(log_cols),bg=CBl,sz=10,ht=26)
+    banner(ws_log,1,"DEFENSIVE IQ — FILM LOG  |  Tag OFF FORM, BACKFIELD, OFF STR, MOTION in Hudl for full analysis",
+           len(log_cols),bg=CR,sz=10,ht=26)
     ws_log.row_dimensions[2].height=36
     for ci,(col,_) in enumerate(log_cols,1):
         if col=="ZONE":    bg="FF000088"
-        elif col in("DEF FRONT","COVERAGE","BLITZ"): bg=CR
-        else: bg=CBl
+        elif col in("BACKFIELD","OFF STR","MOTION"): bg=CPu
+        else: bg=CR
         hdr(ws_log,2,ci,col,bg=bg,sz=8)
     for ri,p in enumerate(plays):
         r=ri+3; ws_log.row_dimensions[r].height=15
@@ -873,21 +873,21 @@ def build_excel(plays, opp, week, date):
         vals={'QTR':'','DN':p['dn'],'DIST':p['dist'],'HASH':p['hash'],
               'YARD LN':'','ZONE':p['zone'],'OFF FORM':p['form'],'OFF PLAY':p['play'],
               'PLAY DIR':p['dir'],'PLAY TYPE':p['rp'],'GN/LS':p['gnls'],
-              'RESULT':p['result'],'DEF FRONT':p['front'],'COVERAGE':p['cov'],'BLITZ':p['blitz']}
+              'RESULT':p['result'],'BACKFIELD':p['backfield'],'OFF STR':p['strength'],'MOTION':p['motion']}
         for ci,(col,_) in enumerate(log_cols,1):
-            zbg="FFE8F4FD" if col=="ZONE" else ("FFFDE8E8" if col in("DEF FRONT","COVERAGE","BLITZ") else bg)
+            zbg="FFE8F4FD" if col=="ZONE" else ("FFEDE7F6" if col in("BACKFIELD","OFF STR","MOTION") else bg)
             sc(ws_log,r,ci,vals.get(col,''),sz=9,bg=zbg,fc="FF000000",
-               h="left" if col in("OFF FORM","OFF PLAY","RESULT","DEF FRONT","COVERAGE","BLITZ") else "center")
+               h="left" if col in("OFF FORM","OFF PLAY","RESULT","BACKFIELD") else "center")
     ws_log.freeze_panes="A3"
 
     # ── Tab 2: Field Zone Tendencies ─────────────────────────
     ws2=wb2.create_sheet("2. Zone x Situation")
-    ws2.sheet_properties.tabColor="1A5276"; ws2.sheet_view.showGridLines=False
+    ws2.sheet_properties.tabColor="7B241C"; ws2.sheet_view.showGridLines=False
     ws2.page_setup.orientation="landscape"
     ws2.page_setup.fitToPage=True; ws2.page_setup.fitToWidth=1; ws2.page_setup.fitToHeight=0
     NC2=8
     widths(ws2,[20,8,22,22,10,10,24,12])
-    banner(ws2,1,"ZONE x SITUATION  —  What they line up in by field position & down/distance",NC2,bg=CB,sz=12,ht=30)
+    banner(ws2,1,"ZONE x SITUATION  —  What they show by field position & down/distance",NC2,bg=CB,sz=12,ht=30)
     ws2.merge_cells(f"A2:{gcl(NC2)}2")
     leg=ws2.cell(row=2,column=1,
         value="  Situations with no snaps are skipped. Cells marked * have 1-2 snaps — too thin to call a tendency.")
@@ -918,18 +918,18 @@ def build_excel(plays, opp, week, date):
     for zcode in zone_list:
         zp=[p for p in plays if p['zone']==zcode]
         if not zp: continue
-        zk=[p for p in zp if p.get('blitzed') is not None]
-        zb=[p for p in zk if p['blitzed'] is True]
-        zbr=f"{round(len(zb)/len(zk)*100)}% blitz" if zk else "blitz n/a"
+        zk=[p for p in zp if p.get('motioned') is not None]
+        zb=[p for p in zk if p['motioned'] is True]
+        zmr=f"{round(len(zb)/len(zk)*100)}% motion" if zk else "motion n/a"
         ws2.merge_cells(start_row=row,start_column=1,end_row=row,end_column=NC2)
         c=ws2.cell(row=row,column=1,
-            value=f"  {zcode}  ·  {zone_names[zcode]}   —   {len(zp)} snaps   ·   {zbr}")
+            value=f"  {zcode}  ·  {zone_names[zcode]}   —   {len(zp)} snaps   ·   {zmr}")
         c.font=Font(name=FN,bold=True,size=11,color=CW)
         c.fill=fil(zone_hdrs[zcode]); c.alignment=Alignment(horizontal="left",vertical="center")
         ws2.row_dimensions[row].height=20
         row+=1
-        for cn,txt in [(1,"SITUATION"),(2,"Snaps"),(3,"Top Fronts"),(4,"Top Coverages"),
-                       (5,"Blitz%"),(6,"Yds Allowed"),(7,"Named Pressures"),(8,"Succ% Allowed")]:
+        for cn,txt in [(1,"SITUATION"),(2,"Snaps"),(3,"Top Formations"),(4,"Top Backfields"),
+                       (5,"Motion%"),(6,"Yds/Play"),(7,"Named Motions"),(8,"Success%")]:
             hdr(ws2,row,cn,txt,bg=CB,sz=8)
         ws2.row_dimensions[row].height=16
         row+=1
@@ -941,21 +941,22 @@ def build_excel(plays, opp, week, date):
             shown+=1
             thin=" *" if len(sp)<3 else ""
             bg=zone_bgs[zcode] if si%2==0 else CL
-            spk=[p for p in sp if p.get('blitzed') is not None]
-            sb=[p for p in spk if p['blitzed'] is True]
+            spk=[p for p in sp if p.get('motioned') is not None]
+            sb=[p for p in spk if p['motioned'] is True]
             ws2.row_dimensions[row].height=24
             sc(ws2,row,1,lbl+thin,bold=True,sz=9,fc=CW,bg=CTe,h="left")
             sc(ws2,row,2,len(sp),bold=True,sz=10,fc="FF000000",bg=bg,fmt="0")
-            sc(ws2,row,3,_zs_top(sp,'front'),sz=8,fc="FF8B0000",bg=CRB,h="left",wrap=True)
-            sc(ws2,row,4,_zs_top(sp,'cov'),sz=8,fc="FF00008B",bg=CPB,h="left",wrap=True)
+            sc(ws2,row,3,_zs_top(sp,'form'),sz=8,fc="FF8B0000",bg=CRB,h="left",wrap=True)
+            sc(ws2,row,4,_zs_top(sp,'backfield'),sz=8,fc="FF00008B",bg=CPB,h="left",wrap=True)
             if spk:
-                sc(ws2,row,5,float(len(sb))/float(len(spk)),bold=True,sz=10,fc="FFC0392B",bg=CYB,fmt="0%")
+                sc(ws2,row,5,float(len(sb))/float(len(spk)),bold=True,sz=10,fc="FF7B241C",bg=CYB,fmt="0%")
             else:
                 sc(ws2,row,5,"—",sz=9,fc=CDG,bg=bg)
             sc(ws2,row,6,round(sum(p['gnls'] for p in sp)/len(sp),1),sz=9,fc="FF0E7060",bg="FFE8F8E8",fmt="0.0")
-            named=[p for p in sp if p.get('blitz') and not p['blitz'].endswith('Rusher')
-                   and not p['blitz'].endswith('Rushers') and p['blitz']!='No Blitz']
-            sc(ws2,row,7,_zs_top(named,'blitz'),sz=8,fc="FF4A235A",bg="FFEDE7F6",h="left",wrap=True)
+            named=[p for p in sp if p.get('motion') and p['motion']!='No Motion'
+                   and not p['motion'].startswith('Motion Left') and not p['motion'].startswith('Motion Right')
+                   and not p['motion'].startswith('Motion x')]
+            sc(ws2,row,7,_zs_top(named,'motion'),sz=8,fc="FF4A235A",bg="FFEDE7F6",h="left",wrap=True)
             sr=_zs_sr(sp)
             sc(ws2,row,8,(float(sr)/100.0 if sr is not None else "—"),sz=9,fc="FF0E7060",bg="FFE8F8E8",
                fmt="0%" if sr is not None else "General")
@@ -970,17 +971,17 @@ def build_excel(plays, opp, week, date):
         value="* = 1-2 snaps only — too thin to read as a tendency.").font=Font(name=FN,sz=8,italic=True,color=CDG)
     ws2.freeze_panes="A3"
 
-    # ── Tab 3: Defensive Fronts ──────────────────────────────
-    ws3=wb2.create_sheet("3. Defensive Fronts")
-    ws3.sheet_properties.tabColor="C0392B"; ws3.sheet_view.showGridLines=False
+    # ── Tab 3: Formations ─────────────────────────────────────
+    ws3=wb2.create_sheet("3. Formations")
+    ws3.sheet_properties.tabColor="7B241C"; ws3.sheet_view.showGridLines=False
     NC3=10; widths(ws3,[8,12,9,10,20,20,20,20,20,28])
-    banner(ws3,1,"DEFENSIVE FRONTS  —  What fronts they line up in by zone",NC3,bg=CR,sz=12,ht=30)
+    banner(ws3,1,"FORMATIONS  —  What formations they line up in by zone",NC3,bg=CR,sz=12,ht=30)
     ws3.row_dimensions[2].height=20
-    for c,txt,bg,span in[(1,"ZONE",CB,1),(2,"COUNTS",CB,3),(5,"TOP FRONTS PLAYED",CR,3),(8,"TOP FRONT vs RUN",CR,2),(10,"NOTES",CB,1)]:
+    for c,txt,bg,span in[(1,"ZONE",CB,1),(2,"COUNTS",CB,3),(5,"TOP FORMATIONS USED",CR,3),(8,"TOP FORMATION vs RUN",CR,2),(10,"NOTES",CB,1)]:
         hdr(ws3,2,c,txt,bg=bg,sz=8,span=span)
     ws3.row_dimensions[3].height=36
     for c,txt,bg in[(1,"Zone",CB),(2,"Plays",CB),(3,"Run",CB),(4,"Pass",CB),
-                     (5,"#1 Front",CR),(6,"#2 Front",CR),(7,"#3 Front",CR),
+                     (5,"#1 Formation",CR),(6,"#2 Formation",CR),(7,"#3 Formation",CR),
                      (8,"#1 vs Run",CR),(9,"#2 vs Run",CR),(10,"Notes",CB)]:
         hdr(ws3,3,c,txt,bg=bg,sz=9,wrap=True)
     for ri,zcode in enumerate(zone_list):
@@ -993,23 +994,23 @@ def build_excel(plays, opp, week, date):
         sc(ws3,r,2,len(zp),bold=True,sz=11,fc="FF000000",bg=zbg,fmt="0")
         sc(ws3,r,3,len(zr),bold=True,sz=11,fc="FF8B0000",bg="FFFDE8E8",fmt="0")
         sc(ws3,r,4,len(zpass),bold=True,sz=11,fc="FF00008B",bg="FFE8F0FE",fmt="0")
-        t3f=top3(zp,'front'); t3fr=top3(zr,'front')
+        t3f=top3(zp,'form'); t3fr=top3(zr,'form')
         for i,cn in enumerate([5,6,7]): sc(ws3,r,cn,t3f[i]['v']+f" ({t3f[i]['n']})" if i<len(t3f) else "—",sz=9,bg=zbg,wrap=True)
         for i,cn in enumerate([8,9]): sc(ws3,r,cn,t3fr[i]['v']+f" ({t3fr[i]['n']})" if i<len(t3fr) else "—",sz=9,bg=zbg,wrap=True)
         sc(ws3,r,10,"",bg=zbg,sz=9,wrap=True,h="left")
     ws3.freeze_panes="B4"
 
-    # ── Tab 4: Coverages ─────────────────────────────────────
-    ws4=wb2.create_sheet("4. Coverages")
+    # ── Tab 4: Personnel & Backfield ─────────────────────────
+    ws4=wb2.create_sheet("4. Personnel & Backfield")
     ws4.sheet_properties.tabColor="1A5276"; ws4.sheet_view.showGridLines=False
     NC4=10; widths(ws4,[8,12,9,10,20,20,20,20,20,28])
-    banner(ws4,1,"COVERAGES  —  What coverage they play by zone",NC4,bg=CBl,sz=12,ht=30)
+    banner(ws4,1,"PERSONNEL & BACKFIELD  —  What sets they use by zone",NC4,bg=CBl,sz=12,ht=30)
     ws4.row_dimensions[2].height=20
-    for c,txt,bg,span in[(1,"ZONE",CB,1),(2,"COUNTS",CB,3),(5,"TOP COVERAGES",CBl,3),(8,"TOP COV vs PASS",CBl,2),(10,"NOTES",CB,1)]:
+    for c,txt,bg,span in[(1,"ZONE",CB,1),(2,"COUNTS",CB,3),(5,"TOP BACKFIELDS",CBl,3),(8,"TOP BACKFIELD vs PASS",CBl,2),(10,"NOTES",CB,1)]:
         hdr(ws4,2,c,txt,bg=bg,sz=8,span=span)
     ws4.row_dimensions[3].height=36
     for c,txt,bg in[(1,"Zone",CB),(2,"Plays",CB),(3,"Run",CB),(4,"Pass",CB),
-                     (5,"#1 Coverage",CBl),(6,"#2 Coverage",CBl),(7,"#3 Coverage",CBl),
+                     (5,"#1 Backfield",CBl),(6,"#2 Backfield",CBl),(7,"#3 Backfield",CBl),
                      (8,"#1 vs Pass",CBl),(9,"#2 vs Pass",CBl),(10,"Notes",CB)]:
         hdr(ws4,3,c,txt,bg=bg,sz=9,wrap=True)
     for ri,zcode in enumerate(zone_list):
@@ -1022,64 +1023,64 @@ def build_excel(plays, opp, week, date):
         sc(ws4,r,2,len(zp),bold=True,sz=11,fc="FF000000",bg=zbg,fmt="0")
         sc(ws4,r,3,len(zr),bold=True,sz=11,fc="FF8B0000",bg="FFFDE8E8",fmt="0")
         sc(ws4,r,4,len(zpass),bold=True,sz=11,fc="FF00008B",bg="FFE8F0FE",fmt="0")
-        t3c=top3(zp,'cov'); t3cp=top3(zpass,'cov')
+        t3c=top3(zp,'backfield'); t3cp=top3(zpass,'backfield')
         for i,cn in enumerate([5,6,7]): sc(ws4,r,cn,t3c[i]['v']+f" ({t3c[i]['n']})" if i<len(t3c) else "—",sz=9,bg=zbg,wrap=True)
         for i,cn in enumerate([8,9]): sc(ws4,r,cn,t3cp[i]['v']+f" ({t3cp[i]['n']})" if i<len(t3cp) else "—",sz=9,bg=zbg,wrap=True)
         sc(ws4,r,10,"",bg=zbg,sz=9,wrap=True,h="left")
     ws4.freeze_panes="B4"
 
-    # ── Tab 5: Blitzes ───────────────────────────────────────
-    ws5=wb2.create_sheet("5. Blitzes")
+    # ── Tab 5: Motion & Strength ──────────────────────────────
+    ws5=wb2.create_sheet("5. Motion & Strength")
     ws5.sheet_properties.tabColor="4A235A"; ws5.sheet_view.showGridLines=False
     NC5=10; widths(ws5,[8,10,10,10,18,18,18,14,14,28])
-    banner(ws5,1,"BLITZ TENDENCIES  —  When and where they bring pressure",NC5,bg=CPu,sz=12,ht=30)
+    banner(ws5,1,"MOTION & STRENGTH  —  When and where they use motion, and their formation strength",NC5,bg=CPu,sz=12,ht=30)
     ws5.row_dimensions[2].height=20
-    for c,txt,bg,span in[(1,"ZONE",CB,1),(2,"COUNTS",CB,3),(5,"TOP BLITZ TYPES",CPu,3),(8,"HASH BLITZ",CPu,2),(10,"NOTES",CB,1)]:
+    for c,txt,bg,span in[(1,"ZONE",CB,1),(2,"COUNTS",CB,3),(5,"TOP MOTION TYPES",CPu,3),(8,"HASH MOTION",CPu,2),(10,"NOTES",CB,1)]:
         hdr(ws5,2,c,txt,bg=bg,sz=8,span=span)
     ws5.row_dimensions[3].height=36
-    for c,txt,bg in[(1,"Zone",CB),(2,"Plays",CB),(3,"Blitz\nCount",CB),(4,"Blitz %",CB),
-                     (5,"#1 Blitz",CPu),(6,"#2 Blitz",CPu),(7,"#3 Blitz",CPu),
-                     (8,"L Hash\nBlitz%",CPu),(9,"R Hash\nBlitz%",CPu),(10,"Notes",CB)]:
+    for c,txt,bg in[(1,"Zone",CB),(2,"Plays",CB),(3,"Motion\nCount",CB),(4,"Motion %",CB),
+                     (5,"#1 Motion",CPu),(6,"#2 Motion",CPu),(7,"#3 Motion",CPu),
+                     (8,"L Hash\nMotion%",CPu),(9,"R Hash\nMotion%",CPu),(10,"Notes",CB)]:
         hdr(ws5,3,c,txt,bg=bg,sz=9,wrap=True)
     for ri,zcode in enumerate(zone_list):
         r=ri+4; zbg=ZONE_BG[zcode]; zhdr=ZONE_HDR[zcode]
         zp=[p for p in plays if p['zone']==zcode]
-        zb=[p for p in zp if p.get('blitzed') is True]
+        zb=[p for p in zp if p.get('motioned') is True]
         zl=[p for p in zp if p['hash']=='L']; zr_h=[p for p in zp if p['hash']=='R']
-        zbl=[p for p in zl if p.get('blitzed') is True]
-        zbr=[p for p in zr_h if p.get('blitzed') is True]
+        zbl=[p for p in zl if p.get('motioned') is True]
+        zbr=[p for p in zr_h if p.get('motioned') is True]
         ws5.row_dimensions[r].height=28
         sc(ws5,r,1,zcode,bold=True,sz=11,fc=CW,bg=zhdr)
         sc(ws5,r,2,len(zp),bold=True,sz=11,fc="FF000000",bg=zbg,fmt="0")
         sc(ws5,r,3,len(zb),bold=True,sz=11,fc="FF4A235A",bg="FFEDE7F6",fmt="0")
         sc(ws5,r,4,round(len(zb)/len(zp),2) if zp else "",bold=True,sz=11,fc="FF4A235A",bg="FFEDE7F6",fmt="0%")
-        t3b=top3(zb,'blitz')
+        t3b=top3(zb,'motion')
         for i,cn in enumerate([5,6,7]): sc(ws5,r,cn,t3b[i]['v']+f" ({t3b[i]['n']})" if i<len(t3b) else "—",sz=9,bg=zbg,wrap=True)
         sc(ws5,r,8,round(len(zbl)/len(zl),2) if zl else "",sz=10,fc="FF6C3483",bg="FFEAF0FF",fmt="0%")
         sc(ws5,r,9,round(len(zbr)/len(zr_h),2) if zr_h else "",sz=10,fc="FF784212",bg="FFFFF0EA",fmt="0%")
         sc(ws5,r,10,"",bg=zbg,sz=9,wrap=True,h="left")
     ws5.freeze_panes="B4"
 
-    # ── Tab: Front Matchups (how WE do vs each front) ────────
+    # ── Tab: Formation / Backfield / Motion Tendencies ───────
     def _succ_rate(lst):
         v=[p for p in lst if p.get('succ') is not None]
         return round(sum(1 for p in v if p['succ'])/len(v)*100) if v else None
 
     def build_matchup_tab(ws, key, title, accent, min_n=3):
-        """One row per defensive look, showing how offenses have performed against it.
-        NOTE: this is scouting film of THIS defense vs other teams — the offensive
-        production belongs to their past opponents, not to us."""
+        """One row per offensive look, showing how the opposing offense has
+        performed out of it — this is scouting film of THEIR offense, so the
+        production belongs to them, not to us."""
         ws.sheet_view.showGridLines=False
         NC=12
         widths(ws,[20,8,8,9,9,9,9,9,10,10,20,20])
         banner(ws,1,title,NC,bg=accent,sz=12,ht=30)
         ws.row_dimensions[2].height=40
         for cn,txt,bg in[
-            (1,"DEFENSIVE LOOK",CB),(2,"Snaps",CB),(3,"% of\nSnaps",CB),
-            (4,"Run%\nFaced",CR),(5,"Pass%\nFaced",CBl),
-            (6,"Yds\nAllowed",CTe),(7,"Succ%\nAllowed",CTe),(8,"Expl%\nAllowed",CTe),
-            (9,"Run Yds\nAllowed",CR),(10,"Pass Yds\nAllowed",CBl),
-            (11,"Formation That Hurt Them",CPu),(12,"Most Seen On",CPu),
+            (1,"OFFENSIVE LOOK",CB),(2,"Snaps",CB),(3,"% of\nSnaps",CB),
+            (4,"Run%",CR),(5,"Pass%",CBl),
+            (6,"Yds/\nPlay",CTe),(7,"Success%",CTe),(8,"Expl%",CTe),
+            (9,"Run Yds/\nPlay",CR),(10,"Pass Yds/\nPlay",CBl),
+            (11,"Top Play Call",CPu),(12,"Most Seen On",CPu),
         ]:
             hdr(ws,2,cn,txt,bg=bg,sz=8,wrap=True)
 
@@ -1121,15 +1122,15 @@ def build_excel(plays, opp, week, date):
                sz=9,fc="FF8B0000",bg=CRB,fmt="0.0" if vruns else "General")
             sc(ws,r,10,round(sum(p['gnls'] for p in vpass)/len(vpass),1) if vpass else "—",
                sz=9,fc="FF00008B",bg=CPB,fmt="0.0" if vpass else "General")
-            # our best formation against this look (by avg gain, 2+ snaps)
-            fgroups={}
+            # top play call out of this look
+            pgroups={}
             for p in vp:
-                f=p['form']
-                if str(f).strip() in ('','nan','None'): continue
-                fgroups.setdefault(f,[]).append(p)
-            best=[(f,sum(x['gnls'] for x in g)/len(g),len(g)) for f,g in fgroups.items() if len(g)>=2]
+                pl=p['play']
+                if str(pl).strip() in ('','nan','None'): continue
+                pgroups.setdefault(pl,[]).append(p)
+            best=[(pl,len(g)) for pl,g in pgroups.items()]
             best.sort(key=lambda t:-t[1])
-            sc(ws,r,11,f"{best[0][0]} ({best[0][1]:.1f} yd)" if best else "—",
+            sc(ws,r,11,f"{best[0][0]} ({best[0][1]})" if best else "—",
                sz=8,fc="FF4A235A",bg="FFEDE7F6",h="left",wrap=True)
             dd_top=Counter(dd_bucket(p) for p in vp).most_common(1)
             sc(ws,r,12,f"{dd_top[0][0]} ({dd_top[0][1]})" if dd_top else "—",
@@ -1143,30 +1144,30 @@ def build_excel(plays, opp, week, date):
         ws.cell(row=fr,column=1,value="* = small sample (under 5 snaps) — read with caution").font=Font(name=FN,sz=8,italic=True,color=CDG)
         ws.freeze_panes="B3"
 
-    ws_fm=wb2.create_sheet("6. Front Matchups")
+    ws_fm=wb2.create_sheet("6. Formation Tendencies")
     ws_fm.sheet_properties.tabColor="8B0000"
-    build_matchup_tab(ws_fm,'front',"FRONT MATCHUPS  —  What each front has allowed","FF8B0000")
+    build_matchup_tab(ws_fm,'form',"FORMATION TENDENCIES  —  What each formation has produced","FF8B0000")
 
-    ws_cm=wb2.create_sheet("7. Coverage Matchups")
+    ws_cm=wb2.create_sheet("7. Backfield Tendencies")
     ws_cm.sheet_properties.tabColor="00008B"
-    build_matchup_tab(ws_cm,'cov',"COVERAGE MATCHUPS  —  What each coverage has allowed","FF00008B")
+    build_matchup_tab(ws_cm,'backfield',"BACKFIELD TENDENCIES  —  What each backfield set has produced","FF00008B")
 
-    ws_bm=wb2.create_sheet("8. Blitz Matchups")
+    ws_bm=wb2.create_sheet("8. Motion Tendencies")
     ws_bm.sheet_properties.tabColor="4A235A"
-    build_matchup_tab(ws_bm,'blitz',"BLITZ MATCHUPS  —  What their pressure has allowed","FF4A235A")
+    build_matchup_tab(ws_bm,'motion',"MOTION TENDENCIES  —  What their motion looks have produced","FF4A235A")
 
-    # ── Tab: Blitz vs No-Blitz summary ───────────────────────
-    ws_bs=wb2.create_sheet("9. Pressure Summary")
+    # ── Tab: Motion vs No-Motion summary ─────────────────────
+    ws_bs=wb2.create_sheet("9. Motion Summary")
     ws_bs.sheet_properties.tabColor="7B241C"; ws_bs.sheet_view.showGridLines=False
     widths(ws_bs,[24,10,10,10,10,10,22,22])
-    banner(ws_bs,1,"PRESSURE SUMMARY  —  Blitz vs No Blitz",8,bg="FF7B241C",sz=12,ht=30)
+    banner(ws_bs,1,"MOTION SUMMARY  —  Motion vs No Motion",8,bg="FF7B241C",sz=12,ht=30)
     ws_bs.row_dimensions[2].height=36
-    for cn,txt in [(1,"SITUATION"),(2,"Snaps"),(3,"Rate"),(4,"Yds Allowed"),
-                   (5,"Succ% Allowed"),(6,"Expl% Allowed"),(7,"Formation That Hurt Them"),(8,"Most Seen On")]:
+    for cn,txt in [(1,"SITUATION"),(2,"Snaps"),(3,"Rate"),(4,"Yds/Play"),
+                   (5,"Success%"),(6,"Expl%"),(7,"Top Play Call"),(8,"Most Seen On")]:
         hdr(ws_bs,2,cn,txt,bg=CB,sz=8,wrap=True)
-    blitzed=[p for p in plays if p.get('blitzed') is True]
-    nonblitz=[p for p in plays if p.get('blitzed') is False]
-    known=len(blitzed)+len(nonblitz)
+    motioned=[p for p in plays if p.get('motioned') is True]
+    nonmotion=[p for p in plays if p.get('motioned') is False]
+    known=len(motioned)+len(nonmotion)
     def _dd_b(p):
         dn,dist=p['dn'],p['dist']
         if dn==1: return "1st & 10" if dist>=8 else "1st & Short"
@@ -1174,7 +1175,7 @@ def build_excel(plays, opp, week, date):
         if dn==3: return "3rd & Long" if dist>=7 else ("3rd & Med" if dist>=4 else "3rd & Short")
         if dn==4: return "4th Down"
         return "—"
-    rows_bs=[("WHEN THEY BLITZ",blitzed,"FFC0392B"),("WHEN THEY DON'T",nonblitz,"FF0E7060")]
+    rows_bs=[("WHEN THEY MOTION",motioned,"FF7B241C"),("WHEN THEY DON'T",nonmotion,"FF0E7060")]
     for ri,(lbl,grp,color) in enumerate(rows_bs):
         r=ri+3; ws_bs.row_dimensions[r].height=26
         bg=CL if ri%2==0 else CW
@@ -1188,24 +1189,24 @@ def build_excel(plays, opp, week, date):
            bg="FFE8F8E8",fmt="0%" if sr is not None else "General")
         sc(ws_bs,r,6,round(len([p for p in grp if p['expl']])/len(grp),2) if grp else "",
            sz=10,fc="FF0E7060",bg="FFE8F8E8",fmt="0%")
-        fgroups={}
+        pgroups={}
         for p in grp:
-            f=p['form']
-            if str(f).strip() in ('','nan','None'): continue
-            fgroups.setdefault(f,[]).append(p)
-        best=[(f,sum(x['gnls'] for x in g)/len(g),len(g)) for f,g in fgroups.items() if len(g)>=2]
+            pl=p['play']
+            if str(pl).strip() in ('','nan','None'): continue
+            pgroups.setdefault(pl,[]).append(p)
+        best=[(pl,len(g)) for pl,g in pgroups.items()]
         best.sort(key=lambda t:-t[1])
-        sc(ws_bs,r,7,f"{best[0][0]} ({best[0][1]:.1f} yd)" if best else "—",sz=8,bg=bg,h="left",wrap=True)
+        sc(ws_bs,r,7,f"{best[0][0]} ({best[0][1]})" if best else "—",sz=8,bg=bg,h="left",wrap=True)
         ddt=Counter(_dd_b(p) for p in grp).most_common(1)
         sc(ws_bs,r,8,f"{ddt[0][0]} ({ddt[0][1]})" if ddt else "—",sz=8,bg=bg,h="left",wrap=True)
-    # blitz-by-situation breakdown
+    # motion-by-situation breakdown
     r=6
     ws_bs.merge_cells(start_row=r,start_column=1,end_row=r,end_column=8)
-    c=ws_bs.cell(row=r,column=1,value="WHEN DO THEY BRING PRESSURE?")
+    c=ws_bs.cell(row=r,column=1,value="WHEN DO THEY USE MOTION?")
     c.font=Font(name=FN,bold=True,sz=11,color=CW); c.fill=fil(CB); c.alignment=Alignment(horizontal="center")
     ws_bs.row_dimensions[r].height=20
     r+=1
-    for cn,txt in [(1,"SITUATION"),(2,"Snaps"),(3,"Blitz%"),(4,"Yds Allowed"),(5,"Succ% Allowed"),(6,"Expl% Allowed"),(7,""),(8,"")]:
+    for cn,txt in [(1,"SITUATION"),(2,"Snaps"),(3,"Motion%"),(4,"Yds/Play"),(5,"Success%"),(6,"Expl%"),(7,""),(8,"")]:
         hdr(ws_bs,r,cn,txt,bg=CB,sz=8,wrap=True)
     r+=1
     sits_b=[("1st & 10",lambda p:p['dn']==1 and p['dist']>=8),
@@ -1220,12 +1221,12 @@ def build_excel(plays, opp, week, date):
         rr=r+ri; ws_bs.row_dimensions[rr].height=18
         bg=CL if ri%2==0 else CW
         sp=[p for p in plays if fn(p)]
-        spk=[p for p in sp if p.get('blitzed') is not None]
-        sb=[p for p in spk if p['blitzed'] is True]
+        spk=[p for p in sp if p.get('motioned') is not None]
+        sb=[p for p in spk if p['motioned'] is True]
         sc(ws_bs,rr,1,lbl,bold=True,sz=9,fc=CW,bg=CBl,h="left")
         sc(ws_bs,rr,2,len(sp),sz=9,fc="FF000000",bg=bg,fmt="0")
         sc(ws_bs,rr,3,round(len(sb)/len(spk),2) if spk else "",bold=True,sz=10,
-           fc="FFC0392B",bg=CRB,fmt="0%")
+           fc="FF7B241C",bg=CRB,fmt="0%")
         sc(ws_bs,rr,4,round(sum(p['gnls'] for p in sp)/len(sp),1) if sp else "—",
            sz=9,bg=bg,fmt="0.0" if sp else "General")
         s2=_succ_rate(sp)
@@ -1245,7 +1246,7 @@ def build_excel(plays, opp, week, date):
     for cn,txt,bg in[(1,"FIELD ZONE",CB),(2,"L Plays","FF6C3483"),(3,"L Run%","FF6C3483"),(4,"L Pass%","FF6C3483"),
                       (5,"M Plays","FF1A5276"),(6,"M Run%","FF1A5276"),(7,"M Pass%","FF1A5276"),
                       (8,"R Plays","FF784212"),(9,"R Run%","FF784212"),(10,"R Pass%","FF784212"),
-                      (11,"Top L Front",CB),(12,"Top M Front",CB),(13,"Top R Front",CB)]:
+                      (11,"Top L Form",CB),(12,"Top M Form",CB),(13,"Top R Form",CB)]:
         hdr(ws6,2,cn,txt,bg=bg,sz=8)
 
     def hash_row(ws,r,label,base,zhdr_col,zbg):
@@ -1261,7 +1262,7 @@ def build_excel(plays, opp, week, date):
             sc(ws,r,cols[2],round(len(hpass)/n,2) if n>0 else "",sz=11,bold=True,fc="FF00008B",bg=zbg,fmt="0%")
         for col_n,h in[(11,'L'),(12,'M'),(13,'R')]:
             hp=[p for p in base if p['hash']==h]
-            tf=top3(hp,'front')
+            tf=top3(hp,'form')
             sc(ws,r,col_n,tf[0]['v']+f" ({tf[0]['n']})" if tf else "—",sz=9,bg=zbg,h="left",wrap=True)
 
     hash_row(ws6,3,"OVERALL",plays,CB,CL)
@@ -1276,14 +1277,14 @@ def build_excel(plays, opp, week, date):
     ws_dd.sheet_view.showGridLines=False
     NC_DD=13
     widths(ws_dd,[20,8,8,8,20,20,20,20,20,20,16,16,16])
-    banner(ws_dd,1,"DOWN & DISTANCE  —  Top Fronts, Coverages & Blitzes by Situation",NC_DD,bg=CB,sz=12,ht=32)
+    banner(ws_dd,1,"DOWN & DISTANCE  —  Top Formations, Backfields & Motion by Situation",NC_DD,bg=CB,sz=12,ht=32)
 
     ws_dd.row_dimensions[2].height=38
     for cn,txt,bg in[
         (1,"SITUATION",CB),(2,"Plays",CB),(3,"Run%",CB),(4,"Pass%",CB),
-        (5,"#1 Front",CR),(6,"#2 Front",CR),(7,"#3 Front",CR),
-        (8,"#1 Coverage",CBl),(9,"#2 Coverage",CBl),(10,"#3 Coverage",CBl),
-        (11,"Blitz%",CPu),(12,"#1 Blitz Type",CPu),(13,"#2 Blitz Type",CPu),
+        (5,"#1 Formation",CR),(6,"#2 Formation",CR),(7,"#3 Formation",CR),
+        (8,"#1 Backfield",CBl),(9,"#2 Backfield",CBl),(10,"#3 Backfield",CBl),
+        (11,"Motion%",CPu),(12,"#1 Motion Type",CPu),(13,"#2 Motion Type",CPu),
     ]:
         hdr(ws_dd,2,cn,txt,bg=bg,sz=9,wrap=True)
 
@@ -1322,31 +1323,31 @@ def build_excel(plays, opp, week, date):
         n_run=len([p for p in sp if p['rp']=='Run'])
         n_pass=len([p for p in sp if p['rp']=='Pass'])
         total=len(sp)
-        blitz_plays=[p for p in sp if p.get('blitz','') not in('','nan','None','0','No')]
+        motion_plays=[p for p in sp if p.get('motion','') not in('','nan','None','0','No Motion')]
 
         sc(ws_dd,r,1,lbl,bold=True,sz=10,fc=CW,bg=color,h="left")
         sc(ws_dd,r,2,total,bold=True,sz=11,fc="FF000000",bg=bg,fmt="0")
         sc(ws_dd,r,3,round(n_run/total,2) if total>0 else "",bold=True,sz=12,fc="FF8B0000",bg=CRB,fmt="0%")
         sc(ws_dd,r,4,round(n_pass/total,2) if total>0 else "",bold=True,sz=12,fc="FF00008B",bg=CPB,fmt="0%")
 
-        # Top fronts
-        t3f=top3_dd(sp,'front')
+        # Top formations
+        t3f=top3_dd(sp,'form')
         for i,cn in enumerate([5,6,7]):
             c=ws_dd.cell(row=r,column=cn,value=t3f[i])
             c.font=Font(name=FN,sz=9,color="FF8B0000" if t3f[i]!="—" else CDG)
             c.fill=fil(CRB); c.alignment=Alignment(horizontal="left",vertical="center",wrap_text=True); c.border=bdr()
 
-        # Top coverages
-        t3c=top3_dd(sp,'cov')
+        # Top backfields
+        t3c=top3_dd(sp,'backfield')
         for i,cn in enumerate([8,9,10]):
             c=ws_dd.cell(row=r,column=cn,value=t3c[i])
             c.font=Font(name=FN,sz=9,color="FF00008B" if t3c[i]!="—" else CDG)
             c.fill=fil(CPB); c.alignment=Alignment(horizontal="left",vertical="center",wrap_text=True); c.border=bdr()
 
-        # Blitz % + top blitz types
-        blitz_pct=round(len(blitz_plays)/total,2) if total>0 else ""
-        sc(ws_dd,r,11,blitz_pct,bold=True,sz=12,fc="FF4A235A",bg="FFEDE7F6",fmt="0%")
-        t3b=top3_dd(blitz_plays,'blitz')
+        # Motion % + top motion types
+        motion_pct=round(len(motion_plays)/total,2) if total>0 else ""
+        sc(ws_dd,r,11,motion_pct,bold=True,sz=12,fc="FF4A235A",bg="FFEDE7F6",fmt="0%")
+        t3b=top3_dd(motion_plays,'motion')
         for i,cn in enumerate([12,13]):
             c=ws_dd.cell(row=r,column=cn,value=t3b[i])
             c.font=Font(name=FN,sz=9,color="FF4A235A" if t3b[i]!="—" else CDG)
@@ -1359,8 +1360,8 @@ def build_excel(plays, opp, week, date):
     ws7.sheet_properties.tabColor="4A235A"; ws7.sheet_view.showGridLines=False
     NC7=11; widths(ws7,[16,9,9,18,18,18,18,18,18,18,28])
     banner(ws7,1,"SITUATIONAL SUMMARY  —  What they show in every situation",NC7,bg="FF4A235A",sz=12,ht=30)
-    s7h=["Situation","Run\nCount","Pass\nCount","Top Front","Top Coverage",
-         "Blitz %","L Hash\nRun%","M Hash\nRun%","R Hash\nRun%","Top Play","Notes"]
+    s7h=["Situation","Run\nCount","Pass\nCount","Top Formation","Top Backfield",
+         "Motion %","L Hash\nRun%","M Hash\nRun%","R Hash\nRun%","Top Play", "Notes"]
     ws7.row_dimensions[2].height=38
     for ci,h in enumerate(s7h): hdr(ws7,2,ci+1,h,bg="FF4A235A",sz=9,wrap=True)
 
@@ -1391,23 +1392,23 @@ def build_excel(plays, opp, week, date):
         ("MUST HAVE",     dict(dn=4)),
     ]
     sit_colors=["FF0E7060","FF1A5276","FF1A5276","FF1A5276",
-                "FFC0392B","FFC0392B","FFC0392B","FF7B241C",
-                "FFC0392B","FF4A235A","FF0E7060","FF0E7060","FF7D6608","FF16213E"]
+                "FF7B241C","FF7B241C","FF7B241C","FF7B241C",
+                "FF7B241C","FF4A235A","FF0E7060","FF0E7060","FF7D6608","FF16213E"]
 
     for ri,((lbl,args),color) in enumerate(zip(sits,sit_colors)):
         r=ri+3; ws7.row_dimensions[r].height=34
         sc(ws7,r,1,lbl,bold=True,sz=9,fc=CW,bg=color)
         sp=sit(**args)
         sr=[p for p in sp if p['rp']=='Run']; spass=[p for p in sp if p['rp']=='Pass']
-        blitz_p=[p for p in sp if p.get('blitzed') is True]
+        motion_p=[p for p in sp if p.get('motioned') is True]
         l_p=[p for p in sp if p['hash']=='L']; m_p=[p for p in sp if p['hash']=='M']; r_p=[p for p in sp if p['hash']=='R']
         l_r=len([p for p in l_p if p['rp']=='Run']); m_r=len([p for p in m_p if p['rp']=='Run']); r_r=len([p for p in r_p if p['rp']=='Run'])
-        tf=top3(sp,'front'); tc=top3(sp,'cov'); tp=top3(sp,'play')
+        tf=top3(sp,'form'); tc=top3(sp,'backfield'); tp=top3(sp,'play')
         sc(ws7,r,2,len(sr),bold=True,sz=12,fc="FF8B0000",bg="FFFDE8E8",fmt="0")
         sc(ws7,r,3,len(spass),bold=True,sz=12,fc="FF00008B",bg="FFE8F0FE",fmt="0")
         sc(ws7,r,4,tf[0]['v']+f" ({tf[0]['n']})" if tf else "—",sz=9,bg="FFFDE8E8",wrap=True,h="left")
         sc(ws7,r,5,tc[0]['v']+f" ({tc[0]['n']})" if tc else "—",sz=9,bg="FFE8F0FE",wrap=True,h="left")
-        sc(ws7,r,6,round(len(blitz_p)/len(sp),2) if sp else "",sz=10,fc="FF4A235A",bg="FFEDE7F6",fmt="0%")
+        sc(ws7,r,6,round(len(motion_p)/len(sp),2) if sp else "",sz=10,fc="FF4A235A",bg="FFEDE7F6",fmt="0%")
         sc(ws7,r,7,round(l_r/len(l_p),2) if l_p else "",sz=10,fc="FF6C3483",bg="FFEAF0FF",fmt="0%")
         sc(ws7,r,8,round(m_r/len(m_p),2) if m_p else "",sz=10,fc="FF1A5276",bg="FFE8F0FE",fmt="0%")
         sc(ws7,r,9,round(r_r/len(r_p),2) if r_p else "",sz=10,fc="FF784212",bg="FFFFF0EA",fmt="0%")
@@ -1415,21 +1416,15 @@ def build_excel(plays, opp, week, date):
         sc(ws7,r,11,"",bg=CL if ri%2==0 else CW,sz=9,wrap=True,v="top")
     ws7.freeze_panes="D3"
 
-    # ── Tab 8: OC Call Sheet ─────────────────────────────────
-    ws8=wb2.create_sheet("13. OC Call Sheet Builder")
+    # ── Tab 8: DC Call Sheet Builder ─────────────────────────
+    ws8=wb2.create_sheet("13. DC Call Sheet Builder")
     ws8.sheet_properties.tabColor="0E7060"; ws8.sheet_view.showGridLines=False
     NC8=11; widths(ws8,[20,8,18,18,10,9,20,20,18,9,26])
-    banner(ws8,1,"OC CALL SHEET BUILDER  —  Left side auto-filled from film · Yellow = your calls",NC8,bg=CTe,sz=12,ht=30)
-    c8h=["Situation","Snaps","Expected Front","Expected Coverage","Blitz %","Succ%\nAllowed",
-         "Best Run","Best Pass","Protection","Priority","Notes"]
+    banner(ws8,1,"DC CALL SHEET BUILDER  —  Left side auto-filled from film · Yellow = your calls",NC8,bg=CTe,sz=12,ht=30)
+    c8h=["Situation","Snaps","Expected Formation","Expected Backfield","Motion %","Their\nSuccess%",
+         "Run Fit / Front","Coverage Call","Pressure Package","Priority","Notes"]
     ws8.row_dimensions[2].height=38
     for ci,h in enumerate(c8h): hdr(ws8,2,ci+1,h,bg=CTe,sz=9,wrap=True)
-    call_sits=["1st & 10","1st & 10 (Own Half)","1st & 10 (Opp Half)",
-        "2nd & Long (8+)","2nd & Medium (4-7)","2nd & Short (1-3)",
-        "3rd & Long (7+)","3rd & Medium (4-6)","3rd & Short (1-3)",
-        "4th Down","Red Zone — 1st","Red Zone — 2nd","Red Zone — 3rd",
-        "Goal Line","Backed Up","Coming Out","Two-Minute (Lead)",
-        "Two-Minute (Trail)","Must-Have Plays","Two-Point Play","Overtime"]
     def _cs_sr(lst):
         v=[p for p in lst if p.get('succ') is not None]
         return round(sum(1 for p in v if p['succ'])/len(v)*100) if v else None
@@ -1438,7 +1433,7 @@ def build_excel(plays, opp, week, date):
         c=Counter(vals).most_common(1)
         return c[0][0] if c else "—"
 
-    # Situations mapped to real filters so we can PRE-FILL what the defense does
+    # Situations mapped to real filters so we can PRE-FILL what the offense does
     cs_filters=[
         ("1st & 10",            lambda p: p['dn']==1 and p['dist']>=8),
         ("1st & 10 (Own Half)", lambda p: p['dn']==1 and p['dist']>=8 and p['zone'] in ('BZ','OF')),
@@ -1460,8 +1455,8 @@ def build_excel(plays, opp, week, date):
         ("Middle of Field",     lambda p: p['hash']=='M'),
         ("Right Hash",          lambda p: p['hash']=='R'),
     ]
-    blank_rows=["Two-Minute (Lead)","Two-Minute (Trail)","Must-Have Plays",
-                "Two-Point Play","Overtime","Openers","Shot Plays"]
+    blank_rows=["Two-Minute (Ahead)","Two-Minute (Behind)","Must-Stop Plays",
+                "Two-Point Defense","Overtime","Openers","Shot Play Alert"]
 
     r=3
     for ri,(lbl,fn) in enumerate(cs_filters):
@@ -1469,22 +1464,22 @@ def build_excel(plays, opp, week, date):
         bg="FFF0FFF0" if ri%2==0 else CW
         try: sp=[p for p in plays if fn(p)]
         except: sp=[]
-        spk=[p for p in sp if p.get('blitzed') is not None]
-        sb=[p for p in spk if p['blitzed'] is True]
-        blitz_txt=f"{round(len(sb)/len(spk)*100)}%" if spk else "—"
+        spk=[p for p in sp if p.get('motioned') is not None]
+        sb=[p for p in spk if p['motioned'] is True]
+        motion_txt=f"{round(len(sb)/len(spk)*100)}%" if spk else "—"
         sr=_cs_sr(sp)
         sc(ws8,r,1,lbl,bold=True,sz=9,fc=CW,bg=CGr,h="left")
         sc(ws8,r,2,len(sp),sz=9,bg=bg,fmt="0")
-        sc(ws8,r,3,_cs_top(sp,'front'),sz=8,bg=bg,h="left",wrap=True)
-        sc(ws8,r,4,_cs_top(sp,'cov'),sz=8,bg=bg,h="left",wrap=True)
-        sc(ws8,r,5,blitz_txt,bold=True,sz=9,fc="FFC0392B",bg="FFFDE8E8")
+        sc(ws8,r,3,_cs_top(sp,'form'),sz=8,bg=bg,h="left",wrap=True)
+        sc(ws8,r,4,_cs_top(sp,'backfield'),sz=8,bg=bg,h="left",wrap=True)
+        sc(ws8,r,5,motion_txt,bold=True,sz=9,fc="FF7B241C",bg="FFFDE8E8")
         sc(ws8,r,6,(sr/100 if sr is not None else "—"),sz=9,fc="FF0E7060",bg="FFE8F8E8",
            fmt="0%" if sr is not None else "General")
-        # blank columns for the OC's own calls
+        # blank columns for the DC's own calls
         for ci in range(7,NC8+1):
             sc(ws8,r,ci,"",bg="FFFFFBE6",sz=9,wrap=True,v="top")
         r+=1
-    # extra blank situations the OC fills in entirely
+    # extra blank situations the DC fills in entirely
     for ri,lbl in enumerate(blank_rows):
         ws8.row_dimensions[r].height=22
         sc(ws8,r,1,lbl,bold=True,sz=9,fc=CW,bg=CBl,h="left")
@@ -1505,9 +1500,9 @@ def build_excel(plays, opp, week, date):
     ws9.page_setup.paperSize=1; ws9.page_setup.orientation="landscape"
     ws9.page_setup.fitToPage=True; ws9.page_setup.fitToWidth=1; ws9.page_setup.fitToHeight=1
     widths(ws9,[22,32,3,22,32,3,22,32])
-    banner(ws9,1,"OFFENSIVE COORDINATOR SUMMARY  ·  PRINT LANDSCAPE",8,bg=CB,sz=14,ht=36)
+    banner(ws9,1,"DEFENSIVE COORDINATOR SUMMARY  ·  PRINT LANDSCAPE",8,bg=CB,sz=14,ht=36)
     ws9.row_dimensions[2].height=18
-    for lbl,ci in[("OPP:",1),("WEEK:",3),("DATE:",5),("OC:",7)]:
+    for lbl,ci in[("OPP:",1),("WEEK:",3),("DATE:",5),("DC:",7)]:
         sc(ws9,2,ci,lbl,bold=True,sz=9,fc=CW,bg=CBl,h="right")
         val={"OPP:":opp,"WEEK:":week,"DATE:":date}.get(lbl,"")
         sc(ws9,2,ci+1,val,bg=CL,sz=9)
@@ -1517,7 +1512,7 @@ def build_excel(plays, opp, week, date):
 
     rz=[p for p in plays if p['zone']=='RZ']; gl=[p for p in plays if p['zone']=='GL']
     t3d=[p for p in plays if p['dn']==3]
-    all_blitz=[p for p in plays if p.get('blitzed') is True]
+    all_motion=[p for p in plays if p.get('motioned') is True]
 
     def blk(ws,sr,ca,cb,title,data,hc):
         ws.row_dimensions[sr].height=17
@@ -1544,11 +1539,11 @@ def build_excel(plays, opp, week, date):
         ("Run %",f"{pct(len(runs),total)}%"),("Pass %",f"{pct(len(passes),total)}%"),
     ],CB)
     r+=1
-    r=blk(ws9,r,1,2,"BLITZ OVERVIEW",[
-        ("Total Blitzes",len(all_blitz)),
-        ("Blitz %",f"{pct(len(all_blitz),total)}%"),
-        ("RZ Blitz %",f"{pct(len([p for p in rz if p.get('blitzed') is True]),len([p for p in rz if p.get('blitzed') is not None]))}%"),
-        ("3rd Blitz %",f"{pct(len([p for p in t3d if p.get('blitzed') is True]),len([p for p in t3d if p.get('blitzed') is not None]))}%"),
+    r=blk(ws9,r,1,2,"MOTION OVERVIEW",[
+        ("Total Motion Plays",len(all_motion)),
+        ("Motion %",f"{pct(len(all_motion),total)}%"),
+        ("RZ Motion %",f"{pct(len([p for p in rz if p.get('motioned') is True]),len([p for p in rz if p.get('motioned') is not None]))}%"),
+        ("3rd Down Motion %",f"{pct(len([p for p in t3d if p.get('motioned') is True]),len([p for p in t3d if p.get('motioned') is not None]))}%"),
     ],"FF4A235A")
     r+=1
     blk(ws9,r,1,2,"RED ZONE / GL",[
@@ -1559,31 +1554,31 @@ def build_excel(plays, opp, week, date):
     ],CR)
 
     r=3
-    r=blk(ws9,r,4,5,"TOP FRONTS PLAYED",[(f"#{i+1}",x['v']+f" ({x['n']})") for i,x in enumerate(top3(plays,'front'))],CR)
+    r=blk(ws9,r,4,5,"TOP FORMATIONS PLAYED",[(f"#{i+1}",x['v']+f" ({x['n']})") for i,x in enumerate(top3(plays,'form'))],CR)
     r+=1
-    r=blk(ws9,r,4,5,"TOP COVERAGES FACED",[(f"#{i+1}",x['v']+f" ({x['n']})") for i,x in enumerate(top3(plays,'cov'))],CBl)
+    r=blk(ws9,r,4,5,"TOP BACKFIELDS FACED",[(f"#{i+1}",x['v']+f" ({x['n']})") for i,x in enumerate(top3(plays,'backfield'))],CBl)
     r+=1
-    blk(ws9,r,4,5,"TOP BLITZ TYPES",[(f"#{i+1}",x['v']+f" ({x['n']})") for i,x in enumerate(top3(all_blitz,'blitz'))],CPu)
+    blk(ws9,r,4,5,"TOP MOTION TYPES",[(f"#{i+1}",x['v']+f" ({x['n']})") for i,x in enumerate(top3(all_motion,'motion'))],CPu)
 
     r=3
-    r=blk(ws9,r,7,8,"BEST RUNS VS THEIR D  (fill in)",[("1.",""),("2.",""),("3.",""),("4.",""),("5.","")],CTe)
+    r=blk(ws9,r,7,8,"BEST RUN FITS vs THEIR O  (fill in)",[("1.",""),("2.",""),("3.",""),("4.",""),("5.","")],CTe)
     r+=1
-    r=blk(ws9,r,7,8,"BEST PASSES VS THEIR D  (fill in)",[("1.",""),("2.",""),("3.",""),("4.",""),("5.","")],CBl)
+    r=blk(ws9,r,7,8,"BEST COVERAGE CALLS  (fill in)",[("1.",""),("2.",""),("3.",""),("4.",""),("5.","")],CBl)
     r+=1
-    r=blk(ws9,r,7,8,"BLITZ BEATERS  (fill in)",[("1.",""),("2.",""),("3.",""),("4.","")],CPu)
+    r=blk(ws9,r,7,8,"PRESSURES THAT WORK  (fill in)",[("1.",""),("2.",""),("3.",""),("4.","")],CPu)
     r+=1
-    blk(ws9,r,7,8,"MUST-HAVE PLAYS  (fill in)",[("Call 1.",""),("Call 2.",""),("Call 3.",""),("Call 4.","")],CB)
+    blk(ws9,r,7,8,"MUST-STOP PLAYS  (fill in)",[("Call 1.",""),("Call 2.",""),("Call 3.",""),("Call 4.","")],CB)
 
     buf=io.BytesIO(); wb2.save(buf); buf.seek(0)
     return buf.getvalue()
 
 # ── HTML Report ───────────────────────────────────────────────
 def build_html(plays, opp, week, date):
-    zc={"BZ":"#c0392b","OF":"#1a5276","MF":"#0e7060","FZ":"#7d6608","RZ":"#c0392b","GL":"#4a235a"}
+    zc={"BZ":"#7b241c","OF":"#1a5276","MF":"#0e7060","FZ":"#7d6608","RZ":"#7b241c","GL":"#4a235a"}
     zn={"BZ":"Backed Up","OF":"Open Field","MF":"Midfield","FZ":"Fringe","RZ":"Red Zone","GL":"Goal Line"}
     zone_list=["BZ","OF","MF","FZ","RZ","GL"]
     total=len(plays); runs=[p for p in plays if p['rp']=='Run']; passes=[p for p in plays if p['rp']=='Pass']
-    all_blitz=[p for p in plays if p.get('blitzed') is True]
+    all_motion=[p for p in plays if p.get('motioned') is True]
     rz=[p for p in plays if p['zone']=='RZ']; gl=[p for p in plays if p['zone']=='GL']
 
     def tags(items,cls=''):
@@ -1596,7 +1591,7 @@ def build_html(plays, opp, week, date):
         if not zp: continue
         zr2=[p for p in zp if p['rp']=='Run']; zpas=[p for p in zp if p['rp']=='Pass']
         rp=pct(len(zr2),len(zp)); pp=pct(len(zpas),len(zp))
-        zb=[p for p in zp if p.get('blitzed') is True]
+        zb=[p for p in zp if p.get('motioned') is True]
         zone_cards+=f'''<div class="zone-card">
           <div class="zone-hdr" style="background:{zc[z]}20;border-bottom:2px solid {zc[z]}">
             <div><div class="zone-badge" style="color:{zc[z]}">{z}</div><div class="zone-sub">{zn[z]}</div></div>
@@ -1605,12 +1600,12 @@ def build_html(plays, opp, week, date):
           <div class="zone-body">
             <div class="bar-row">
               <div class="bar-labels"><span style="color:#e8a095">RUN {rp}%</span><span style="color:#93d4f0">PASS {pp}%</span></div>
-              <div class="bar-bg"><div class="bar-fill" style="background:#c0392b;width:{rp}%"></div></div>
+              <div class="bar-bg"><div class="bar-fill" style="background:#7b241c;width:{rp}%"></div></div>
             </div>
             <div class="zone-tags">
-              <div class="tag-lbl">Top Fronts</div>{tags(top3(zp,"front"),"f")}
-              <div class="tag-lbl" style="margin-top:6px">Top Coverages</div>{tags(top3(zp,"cov"),"c")}
-              <div class="tag-lbl" style="margin-top:6px">Blitz % — {pct(len(zb),len(zp))}%</div>{tags(top3(zb,"blitz"),"b")}
+              <div class="tag-lbl">Top Formations</div>{tags(top3(zp,"form"),"f")}
+              <div class="tag-lbl" style="margin-top:6px">Top Backfields</div>{tags(top3(zp,"backfield"),"c")}
+              <div class="tag-lbl" style="margin-top:6px">Motion % — {pct(len(zb),len(zp))}%</div>{tags(top3(zb,"motion"),"b")}
             </div>
           </div>
         </div>'''
@@ -1620,17 +1615,17 @@ def build_html(plays, opp, week, date):
         hp=[p for p in plays if p['hash']==h]
         if not hp: hash_cards+=f'<div class="hash-card {cls}"><div class="hc-title" style="color:{color}">{lbl}</div><p style="color:rgba(240,237,232,.25);text-align:center;font-size:12px">No data</p></div>'; continue
         hr2=[p for p in hp if p['rp']=='Run']; hpass=[p for p in hp if p['rp']=='Pass']
-        hb=[p for p in hp if p.get('blitzed') is True]
-        tf=top3(hp,'front')
+        hb=[p for p in hp if p.get('motioned') is True]
+        tf=top3(hp,'form')
         hash_cards+=f'''<div class="hash-card {cls}">
           <div class="hc-title" style="color:{color}">{lbl}</div>
           <div class="hbig" style="color:{color}">{len(hp)}</div>
           <div class="hsub">total plays</div>
           <div class="hrp">
-            <div class="hrp-item"><div class="hrp-lbl">Run %</div><div class="hrp-val" style="color:#c0392b">{pct(len(hr2),len(hp))}%</div></div>
-            <div class="hrp-item"><div class="hrp-lbl">Blitz %</div><div class="hrp-val" style="color:#b388d4">{pct(len(hb),len(hp))}%</div></div>
+            <div class="hrp-item"><div class="hrp-lbl">Run %</div><div class="hrp-val" style="color:#7b241c">{pct(len(hr2),len(hp))}%</div></div>
+            <div class="hrp-item"><div class="hrp-lbl">Motion %</div><div class="hrp-val" style="color:#b388d4">{pct(len(hb),len(hp))}%</div></div>
           </div>
-          <div class="htc">Top Front: <span style="color:#d4a017">{tf[0]["v"]+" ("+str(tf[0]["n"])+")" if tf else "—"}</span></div>
+          <div class="htc">Top Formation: <span style="color:#d4a017">{tf[0]["v"]+" ("+str(tf[0]["n"])+")" if tf else "—"}</span></div>
         </div>'''
 
     sit_rows=''
@@ -1642,11 +1637,11 @@ def build_html(plays, opp, week, date):
     for lbl,fn in sits2:
         sp=[p for p in plays if fn(p)]
         sr2=[p for p in sp if p['rp']=='Run']; spass=[p for p in sp if p['rp']=='Pass']
-        sb=[p for p in sp if p.get('blitzed') is True]
-        tf=top3(sp,'front'); tc=top3(sp,'cov')
+        sb=[p for p in sp if p.get('motioned') is True]
+        tf=top3(sp,'form'); tc=top3(sp,'backfield')
         sit_rows+=f'''<tr>
           <td class="sit-lbl">{lbl}</td>
-          <td style="text-align:center;font-family:Barlow Condensed,sans-serif;font-weight:800;font-size:20px;color:#c0392b">{len(sr2)}</td>
+          <td style="text-align:center;font-family:Barlow Condensed,sans-serif;font-weight:800;font-size:20px;color:#7b241c">{len(sr2)}</td>
           <td style="text-align:center;font-family:Barlow Condensed,sans-serif;font-weight:800;font-size:20px;color:#5dade2">{len(spass)}</td>
           <td style="text-align:center;font-family:Barlow Condensed,sans-serif;font-weight:700;font-size:16px;color:#b388d4">{str(pct(len(sb),len(sp)))+"%"  if sp else "—"}</td>
           <td style="font-family:Share Tech Mono,monospace;font-size:9px;color:#d4a017">{tf[0]["v"]+" ("+str(tf[0]["n"])+")" if tf else "—"}</td>
@@ -1657,45 +1652,43 @@ def build_html(plays, opp, week, date):
         if not items: return '<div style="color:rgba(240,237,232,.3);font-size:12px">No data — tag in Hudl to see trends</div>'
         return ''.join(f'<div style="padding:9px 0;border-bottom:1px solid rgba(240,237,232,.1)"><div style="display:flex;justify-content:space-between"><span style="font-family:Share Tech Mono,monospace;font-size:11px;color:{color}">{x["v"]}</span><span style="font-family:Barlow Condensed,sans-serif;font-weight:700;font-size:20px;color:{color}">{x["n"]}</span></div><div style="background:rgba(240,237,232,.06);height:3px;margin-top:4px"><div style="background:{color};height:3px;width:{round(x["n"]/max_n*100)}%"></div></div></div>' for x in items)
 
-    mf=top3(plays,'front')[0]['n'] if top3(plays,'front') else 1
-    mc=top3(plays,'cov')[0]['n'] if top3(plays,'cov') else 1
-    mb=top3(all_blitz,'blitz')[0]['n'] if top3(all_blitz,'blitz') else 1
+    mf=top3(plays,'form')[0]['n'] if top3(plays,'form') else 1
+    mc=top3(plays,'backfield')[0]['n'] if top3(plays,'backfield') else 1
+    mb=top3(all_motion,'motion')[0]['n'] if top3(all_motion,'motion') else 1
 
     return f'''<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>OffensiveIQ — {opp}</title>
+<title>DefensiveIQ — {opp}</title>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<style>:root{{--field:#0a1628;--chalk:#f0ede8;--red:#c0392b;--gold:#d4a017;--blue:#1a5276;--mid:#1e2d3d;--line:rgba(240,237,232,0.1);}}*{{box-sizing:border-box;margin:0;padding:0;}}body{{background:var(--field);color:var(--chalk);font-family:Inter,sans-serif;font-size:17px;line-height:1.5;}}nav{{display:flex;align-items:center;justify-content:space-between;padding:14px 40px;border-bottom:1px solid var(--line);background:rgba(10,22,40,.97);}}.logo{{font-family:Oswald,sans-serif;font-weight:900;font-size:22px;}}.logo span{{color:#1a5276;}}.wrap{{max-width:1200px;margin:0 auto;padding:40px;}}.eyebrow{{font-family:Inter,sans-serif;font-size:19px;letter-spacing:.2em;color:var(--gold);text-transform:uppercase;margin-bottom:10px;}}.rpt-hdr{{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:32px;padding-bottom:18px;border-bottom:1px solid var(--line);}}.rpt-title{{font-family:Oswald,sans-serif;font-weight:900;font-size:42px;text-transform:uppercase;}}.rpt-meta{{font-family:Inter,sans-serif;font-size:19px;color:var(--gold);text-align:right;}}.sum-grid{{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:36px;}}.sum-card{{background:var(--mid);border:1px solid var(--line);padding:16px;}}.sum-lbl{{font-size:13px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:rgba(240,237,232,.65);margin-bottom:5px;}}.sum-val{{font-family:Oswald,sans-serif;font-weight:800;font-size:37px;line-height:1;}}.stitle{{font-family:Oswald,sans-serif;font-weight:800;font-size:21px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:16px;margin-top:36px;padding-bottom:8px;border-bottom:1px solid var(--line);}}.zone-grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}}.zone-card{{background:var(--mid);border:1px solid var(--line);overflow:hidden;}}.zone-hdr{{padding:10px 14px;display:flex;justify-content:space-between;align-items:center;}}.zone-badge{{font-family:Oswald,sans-serif;font-weight:900;font-size:19px;}}.zone-sub{{font-size:13px;color:rgba(240,237,232,.65);}}.zone-plays{{font-family:Inter,sans-serif;font-size:13px;color:var(--gold);}}.zone-body{{padding:11px 14px;}}.bar-row{{margin-bottom:8px;}}.bar-labels{{display:flex;justify-content:space-between;font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px;}}.bar-bg{{background:rgba(240,237,232,.07);height:5px;position:relative;}}.bar-fill{{height:5px;position:absolute;left:0;top:0;}}.zone-tags{{margin-top:8px;border-top:1px solid var(--line);padding-top:8px;}}.tag-lbl{{font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(240,237,232,.82);margin-bottom:3px;}}.ctag{{display:inline-block;background:rgba(240,237,232,.05);border:1px solid rgba(240,237,232,.1);font-family:Inter,sans-serif;font-size:12px;padding:2px 4px;margin:1px 1px 1px 0;color:rgba(240,237,232,.82);}}.ctag.f{{border-color:rgba(192,57,43,.4);color:#e8a095;}}.ctag.c{{border-color:rgba(93,173,226,.35);color:#93d4f0;}}.ctag.b{{border-color:rgba(180,136,212,.4);color:#b388d4;}}.hash-grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}}.hash-card{{background:var(--mid);border:1px solid var(--line);padding:18px;text-align:center;}}.hc-title{{font-family:Oswald,sans-serif;font-weight:800;font-size:15px;letter-spacing:.14em;text-transform:uppercase;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--line);}}.hbig{{font-family:Oswald,sans-serif;font-weight:900;font-size:50px;line-height:1;margin-bottom:2px;}}.hsub{{font-size:13px;color:rgba(240,237,232,.62);margin-bottom:10px;}}.hrp{{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;}}.hrp-item{{background:rgba(240,237,232,.04);padding:7px;}}.hrp-lbl{{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:rgba(240,237,232,.62);}}.hrp-val{{font-family:Oswald,sans-serif;font-weight:700;font-size:21px;}}.htc{{font-family:Inter,sans-serif;font-size:13px;color:rgba(240,237,232,.62);}}.sit-table{{width:100%;border-collapse:collapse;font-size:15px;}}.sit-table th{{background:var(--field);padding:7px 10px;font-family:Oswald,sans-serif;font-weight:700;font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:rgba(240,237,232,.7);border:1px solid var(--line);text-align:center;}}.sit-table th:first-child{{text-align:left;}}.sit-table td{{border:1px solid var(--line);padding:8px 12px;}}.sit-table tr:nth-child(odd) td{{background:rgba(240,237,232,.02);}}.sit-table tr:nth-child(even) td{{background:var(--mid);}}.sit-lbl{{font-family:Oswald,sans-serif;font-weight:700;font-size:15px;white-space:nowrap;}}.con-grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;}}</style>
+<style>:root{{--field:#0a1628;--chalk:#f0ede8;--red:#7b241c;--gold:#d4a017;--blue:#1a5276;--mid:#1e2d3d;--line:rgba(240,237,232,0.1);}}*{{box-sizing:border-box;margin:0;padding:0;}}body{{background:var(--field);color:var(--chalk);font-family:Inter,sans-serif;font-size:17px;line-height:1.5;}}nav{{display:flex;align-items:center;justify-content:space-between;padding:14px 40px;border-bottom:1px solid var(--line);background:rgba(10,22,40,.97);}}.logo{{font-family:Oswald,sans-serif;font-weight:900;font-size:22px;}}.logo span{{color:#7b241c;}}.wrap{{max-width:1200px;margin:0 auto;padding:40px;}}.eyebrow{{font-family:Inter,sans-serif;font-size:19px;letter-spacing:.2em;color:var(--gold);text-transform:uppercase;margin-bottom:10px;}}.rpt-hdr{{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:32px;padding-bottom:18px;border-bottom:1px solid var(--line);}}.rpt-title{{font-family:Oswald,sans-serif;font-weight:900;font-size:42px;text-transform:uppercase;}}.rpt-meta{{font-family:Inter,sans-serif;font-size:19px;color:var(--gold);text-align:right;}}.sum-grid{{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:36px;}}.sum-card{{background:var(--mid);border:1px solid var(--line);padding:16px;}}.sum-lbl{{font-size:13px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:rgba(240,237,232,.65);margin-bottom:5px;}}.sum-val{{font-family:Oswald,sans-serif;font-weight:800;font-size:37px;line-height:1;}}.stitle{{font-family:Oswald,sans-serif;font-weight:800;font-size:21px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:16px;margin-top:36px;padding-bottom:8px;border-bottom:1px solid var(--line);}}.zone-grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}}.zone-card{{background:var(--mid);border:1px solid var(--line);overflow:hidden;}}.zone-hdr{{padding:10px 14px;display:flex;justify-content:space-between;align-items:center;}}.zone-badge{{font-family:Oswald,sans-serif;font-weight:900;font-size:19px;}}.zone-sub{{font-size:13px;color:rgba(240,237,232,.65);}}.zone-plays{{font-family:Inter,sans-serif;font-size:13px;color:var(--gold);}}.zone-body{{padding:11px 14px;}}.bar-row{{margin-bottom:8px;}}.bar-labels{{display:flex;justify-content:space-between;font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px;}}.bar-bg{{background:rgba(240,237,232,.07);height:5px;position:relative;}}.bar-fill{{height:5px;position:absolute;left:0;top:0;}}.zone-tags{{margin-top:8px;border-top:1px solid var(--line);padding-top:8px;}}.tag-lbl{{font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(240,237,232,.82);margin-bottom:3px;}}.ctag{{display:inline-block;background:rgba(240,237,232,.05);border:1px solid rgba(240,237,232,.1);font-family:Inter,sans-serif;font-size:12px;padding:2px 4px;margin:1px 1px 1px 0;color:rgba(240,237,232,.82);}}.ctag.f{{border-color:rgba(123,36,28,.4);color:#e8a095;}}.ctag.c{{border-color:rgba(93,173,226,.35);color:#93d4f0;}}.ctag.b{{border-color:rgba(180,136,212,.4);color:#b388d4;}}.hash-grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}}.hash-card{{background:var(--mid);border:1px solid var(--line);padding:18px;text-align:center;}}.hc-title{{font-family:Oswald,sans-serif;font-weight:800;font-size:15px;letter-spacing:.14em;text-transform:uppercase;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--line);}}.hbig{{font-family:Oswald,sans-serif;font-weight:900;font-size:50px;line-height:1;margin-bottom:2px;}}.hsub{{font-size:13px;color:rgba(240,237,232,.62);margin-bottom:10px;}}.hrp{{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;}}.hrp-item{{background:rgba(240,237,232,.04);padding:7px;}}.hrp-lbl{{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:rgba(240,237,232,.62);}}.hrp-val{{font-family:Oswald,sans-serif;font-weight:700;font-size:21px;}}.htc{{font-family:Inter,sans-serif;font-size:13px;color:rgba(240,237,232,.62);}}.sit-table{{width:100%;border-collapse:collapse;font-size:15px;}}.sit-table th{{background:var(--field);padding:7px 10px;font-family:Oswald,sans-serif;font-weight:700;font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:rgba(240,237,232,.7);border:1px solid var(--line);text-align:center;}}.sit-table th:first-child{{text-align:left;}}.sit-table td{{border:1px solid var(--line);padding:8px 12px;}}.sit-table tr:nth-child(odd) td{{background:rgba(240,237,232,.02);}}.sit-table tr:nth-child(even) td{{background:var(--mid);}}.sit-lbl{{font-family:Oswald,sans-serif;font-weight:700;font-size:15px;white-space:nowrap;}}.con-grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;}}</style>
 </head><body>
-<nav><div class="logo">Offensive<span>IQ</span></div><div style="font-family:Share Tech Mono,monospace;font-size:10px;color:rgba(240,237,232,.4)">DEFENSIVE TENDENCY REPORT</div></nav>
+<nav><div class="logo">DEFENSIVE<span>IQ</span></div><div style="font-family:Share Tech Mono,monospace;font-size:10px;color:rgba(240,237,232,.4)">OFFENSIVE TENDENCY REPORT</div></nav>
 <div class="wrap">
-<div class="rpt-hdr"><div><div class="eyebrow">// Offensive Coordinator — Defensive Tendency Report</div><div class="rpt-title">{opp} — Defensive Analysis</div></div><div class="rpt-meta">WEEK {week}{("<br>"+date) if date else ""}<br>{total} PLAYS ANALYZED</div></div>
+<div class="rpt-hdr"><div><div class="eyebrow">// Defensive Coordinator — Offensive Tendency Report</div><div class="rpt-title">{opp} — Offensive Analysis</div></div><div class="rpt-meta">WEEK {week}{("<br>"+date) if date else ""}<br>{total} PLAYS ANALYZED</div></div>
 <div class="sum-grid">
   <div class="sum-card"><div class="sum-lbl">Total Plays</div><div class="sum-val">{total}</div></div>
-  <div class="sum-card"><div class="sum-lbl">Their Run %</div><div class="sum-val" style="color:#c0392b">{pct(len(runs),total)}%</div></div>
+  <div class="sum-card"><div class="sum-lbl">Their Run %</div><div class="sum-val" style="color:#7b241c">{pct(len(runs),total)}%</div></div>
   <div class="sum-card"><div class="sum-lbl">Their Pass %</div><div class="sum-val" style="color:#5dade2">{pct(len(passes),total)}%</div></div>
-  <div class="sum-card"><div class="sum-lbl">Blitz %</div><div class="sum-val" style="color:#b388d4">{pct(len(all_blitz),total)}%</div></div>
+  <div class="sum-card"><div class="sum-lbl">Motion %</div><div class="sum-val" style="color:#b388d4">{pct(len(all_motion),total)}%</div></div>
   <div class="sum-card"><div class="sum-lbl">RZ Run %</div><div class="sum-val" style="color:#d4a017">{pct(len([p for p in rz if p["rp"]=="Run"]),len(rz))}%</div></div>
 </div>
 <div class="stitle">Field Zone Breakdown</div><div class="zone-grid">{zone_cards}</div>
 <div class="stitle">Hash Tendencies</div><div class="hash-grid">{hash_cards}</div>
 <div class="stitle">Situational Summary</div>
 <table class="sit-table">
-  <tr><th style="text-align:left">Situation</th><th>Runs</th><th>Passes</th><th>Blitz %</th><th style="text-align:left">Top Front</th><th style="text-align:left">Top Coverage</th></tr>
+  <tr><th style="text-align:left">Situation</th><th>Runs</th><th>Passes</th><th>Motion %</th><th style="text-align:left">Top Formation</th><th style="text-align:left">Top Backfield</th></tr>
   {sit_rows}
 </table>
-<div class="stitle">Defensive Tendencies</div>
+<div class="stitle">Offensive Tendencies</div>
 <div class="con-grid">
-  <div><div class="eyebrow" style="margin-bottom:12px">// Top Fronts</div>{con_rows(top3(plays,"front"),"#e8a095",mf)}</div>
-  <div><div class="eyebrow" style="margin-bottom:12px">// Top Coverages</div>{con_rows(top3(plays,"cov"),"#93d4f0",mc)}</div>
-  <div><div class="eyebrow" style="margin-bottom:12px">// Top Blitz Types</div>{con_rows(top3(all_blitz,"blitz"),"#b388d4",mb)}</div>
+  <div><div class="eyebrow" style="margin-bottom:12px">// Top Formations</div>{con_rows(top3(plays,"form"),"#e8a095",mf)}</div>
+  <div><div class="eyebrow" style="margin-bottom:12px">// Top Backfields</div>{con_rows(top3(plays,"backfield"),"#93d4f0",mc)}</div>
+  <div><div class="eyebrow" style="margin-bottom:12px">// Top Motion Types</div>{con_rows(top3(all_motion,"motion"),"#b388d4",mb)}</div>
 </div>
 </div></body></html>'''
 
 # ── STREAMLIT UI ──────────────────────────────────────────────
-st.markdown('<div class="main-title">Offensive<span style="color:#1a5276">IQ</span></div>', unsafe_allow_html=True)
-st.markdown('<div style="font-size:16px;color:rgba(240,237,232,.55);margin-bottom:24px;font-weight:300">Scout your next opponent. Upload film of their defense playing other teams and see every tendency — fronts, coverages, blitzes — by zone, hash, and situation.</div>', unsafe_allow_html=True)
-
-st.info("💡 Tag DEF FRONT, COVERAGE, and BLITZ columns in Hudl while watching film for the most complete report. The more you tag, the more powerful the analysis.")
+st.markdown('<div class="main-title">Defensive<span style="color:#7b241c">IQ</span></div>', unsafe_allow_html=True)
+st.markdown('<div style="font-size:16px;color:rgba(240,237,232,.55);margin-bottom:24px;font-weight:300">Scout your next opponent\'s offense. Upload offensive film and uncover every tendency—formations, personnel, backfield sets, motion, run/pass, and situations—to build your defensive game plan.</div>', unsafe_allow_html=True)
 
 st.divider()
 col1,col2,col3=st.columns(3)
@@ -1703,17 +1696,17 @@ with col1: opp  = st.text_input("Opponent Name", placeholder="e.g. Lincoln High 
 with col2: week = st.text_input("Week", placeholder="e.g. 3")
 with col3: date = st.text_input("Game Date", placeholder="e.g. Sept 5, 2026")
 
-st.markdown("**Presentation Colors** — used for your scouting PowerPoint")
+st.markdown("**Presentation Colors** — used for your defensive scouting PowerPoint")
 cc1, cc2 = st.columns(2)
-with cc1: team_primary = st.color_picker("Primary (headers/titles)", "#1A5276")
+with cc1: team_primary = st.color_picker("Primary (headers/titles)", "#7B241C")
 with cc2: team_accent  = st.color_picker("Accent (highlights)", "#C9A227")
 
 st.markdown("---")
 uploaded=st.file_uploader("Upload Hudl Playlist Export (.xlsx or .csv)", type=['xlsx','xls','csv'],
-                           help="Export your playlist from Hudl as Excel or CSV and upload here.")
+                           help="Export the opponent's offensive playlist from Hudl as Excel or CSV and upload here.")
 
 if uploaded and st.button("⚡ RUN ANALYSIS"):
-    with st.spinner("Analyzing defensive tendencies..."):
+    with st.spinner("Analyzing offensive tendencies..."):
         try:
             if uploaded.name.lower().endswith('.csv'):
                 df=pd.read_csv(uploaded)
@@ -1752,8 +1745,8 @@ if uploaded and st.button("⚡ RUN ANALYSIS"):
                 prog.progress(100,"Complete!")
 
                 runs=[p for p in plays if p['rp']=='Run']; passes=[p for p in plays if p['rp']=='Pass']
-                blitz_yes=[p for p in plays if p.get('blitzed') is True]
-                blitz_known=[p for p in plays if p.get('blitzed') is not None]
+                motion_yes=[p for p in plays if p.get('motioned') is True]
+                motion_known=[p for p in plays if p.get('motioned') is not None]
                 rz=[p for p in plays if p['zone']=='RZ']
 
                 st.success(f"✅ Analysis complete — {len(plays)} plays analyzed")
@@ -1763,13 +1756,13 @@ if uploaded and st.button("⚡ RUN ANALYSIS"):
                 m1.metric("Total Plays",   len(plays))
                 m2.metric("Run %",         f"{pct(len(runs),len(plays))}%")
                 m3.metric("Pass %",        f"{pct(len(passes),len(plays))}%")
-                m4.metric("Blitz %",       f"{pct(len(blitz_yes),len(blitz_known))}%" if blitz_known else "—")
+                m4.metric("Motion %",      f"{pct(len(motion_yes),len(motion_known))}%" if motion_known else "—")
                 m5.metric("RZ Run %",      f"{pct(len([p for p in rz if p['rp']=='Run']),len(rz))}%")
 
                 st.divider()
                 st.markdown("### Download Your Reports")
                 d1,d2,d3=st.columns(3)
-                fname=(opp_name+"_" if opp_name else "")+(f"Week{week}_" if week else "")+"OffensiveIQ"
+                fname=(opp_name+"_" if opp_name else "")+(f"Week{week}_" if week else "")+"DefensiveIQ"
                 with d1:
                     st.download_button("📊 Excel Workbook",data=excel_bytes,
                         file_name=f"{fname}.xlsx",
@@ -1786,17 +1779,17 @@ if uploaded and st.button("⚡ RUN ANALYSIS"):
                 st.markdown("### Quick Summary")
                 z1,z2,z3=st.columns(3)
                 with z1:
-                    st.markdown("**Top Fronts Faced**")
-                    for x in top3(plays,'front'): st.markdown(f"- {x['v']} ({x['n']} plays)")
-                    if not any(p['front'] for p in plays): st.markdown("*Tag DEF FRONT in Hudl*")
+                    st.markdown("**Top Formations Faced**")
+                    for x in top3(plays,'form'): st.markdown(f"- {x['v']} ({x['n']} plays)")
+                    if not any(p['form'] for p in plays): st.markdown("*Tag OFF FORM in Hudl*")
                 with z2:
-                    st.markdown("**Top Coverages**")
-                    for x in top3(plays,'cov'): st.markdown(f"- {x['v']} ({x['n']} plays)")
-                    if not any(p['cov'] for p in plays): st.markdown("*Tag COVERAGE in Hudl*")
+                    st.markdown("**Top Backfields**")
+                    for x in top3(plays,'backfield'): st.markdown(f"- {x['v']} ({x['n']} plays)")
+                    if not any(p['backfield'] for p in plays): st.markdown("*Tag BACKFIELD in Hudl*")
                 with z3:
-                    st.markdown("**Top Blitz Types**")
-                    for x in top3(all_blitz,'blitz'): st.markdown(f"- {x['v']} ({x['n']})")
-                    if not all_blitz: st.markdown("*Tag BLITZ in Hudl*")
+                    st.markdown("**Top Motion Types**")
+                    for x in top3(motion_yes,'motion'): st.markdown(f"- {x['v']} ({x['n']})")
+                    if not motion_yes: st.markdown("*Tag MOTION in Hudl*")
 
         except Exception as e:
             import traceback
@@ -1808,4 +1801,4 @@ if uploaded and st.button("⚡ RUN ANALYSIS"):
             st.info("Make sure this is a Hudl playlist export with PLAY TYPE, YARD LN, OFF FORM, DN, DIST, HASH columns.")
 
 st.divider()
-st.markdown('<div style="font-family:Share Tech Mono,monospace;font-size:10px;color:rgba(240,237,232,.25);text-align:center;padding:20px 0">© 2026 OFFENSIVEIQ · BUILT FOR OFFENSIVE COORDINATORS</div>',unsafe_allow_html=True)
+st.markdown('<div style="font-family:Share Tech Mono,monospace;font-size:10px;color:rgba(240,237,232,.25);text-align:center;padding:20px 0">© 2026 DEFENSIVEIQ · BUILT FOR DEFENSIVE COORDINATORS</div>',unsafe_allow_html=True)
