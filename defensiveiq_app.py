@@ -40,6 +40,8 @@ COLUMN_ALIASES = {
     "QTR":         ["QTR", "QUARTER", "QT", "Q"],
     "PERSONNEL":   ["PERSONNEL", "PERS", "PERSONEL", "GROUPING"],
     "MOTION":      ["MOTION", "MOT", "MOTION DIR"],
+    "FORM FAMILY": ["FORM FAMILY", "FORMATION FAMILY", "FAMILY"],
+    "FIB":         ["FIB"],
 }
 
 def _normalize(s):
@@ -193,6 +195,8 @@ def load_plays(df):
             'succ':  succ,
             'expl':  expl,
             'td':    is_td,
+            'form_family': str(row.get('FORM FAMILY', '')).strip(),
+            'fib':   str(row.get('FIB', '')).strip(),
         })
     return plays
 
@@ -1103,6 +1107,51 @@ def build_excel(plays, opp, week, date):
         ws12.row_dimensions[r2].height = 16
         r2 += 1
     ws12.freeze_panes = "A4"
+
+    # ── Tab 13 / 14: Group Tendencies (FORM FAMILY / FIB) ─────
+    def group_tab(ws, group_key, title, accent, tab_color, empty_label="(Blank)", min_n=1):
+        ws.sheet_properties.tabColor = tab_color
+        ws.sheet_view.showGridLines = False
+        NC = 13
+        widths(ws, [20, 8, 8, 8, 18, 18, 18, 18, 18, 18, 16, 16, 16])
+        banner(ws, 1, title, NC, bg=accent, sz=13, ht=28)
+        for c, txt, bg in [(1, "GROUP", CB), (2, "Snaps", CB), (3, "Run%", CB), (4, "Pass%", CB),
+                           (5, "#1 Run Play", CR), (6, "#2 Run Play", CR), (7, "#3 Run Play", CR),
+                           (8, "#1 Pass Play", CBl), (9, "#2 Pass Play", CBl), (10, "#3 Pass Play", CBl),
+                           (11, "#1 Formation", CPu), (12, "#2 Formation", CPu), (13, "#3 Formation", CPu)]:
+            hdr(ws, 2, c, txt, bg=bg, sz=8, wrap=True)
+        groups = {}
+        for p in plays:
+            v = str(p.get(group_key, '')).strip()
+            if v in ('', 'nan', 'None'): v = empty_label
+            groups.setdefault(v, []).append(p)
+        ranked = sorted(groups.items(), key=lambda kv: -len(kv[1]))
+        ranked = [(v, g) for v, g in ranked if len(g) >= min_n]
+        for ri, (v, g) in enumerate(ranked):
+            r = ri + 3; ws.row_dimensions[r].height = 24
+            bg = CL if ri % 2 == 0 else CW
+            gr = [p for p in g if p['rp'] == 'Run']; gp = [p for p in g if p['rp'] == 'Pass']
+            sc(ws, r, 1, v, bold=True, sz=9, fc=CW, bg=accent, h="left")
+            sc(ws, r, 2, len(g), bold=True, sz=10, fc="FF000000", bg=bg, fmt="0")
+            sc(ws, r, 3, round(len(gr) / len(g), 2) if g else "", bold=True, sz=10, fc="FF8B0000", bg=CRB, fmt="0%")
+            sc(ws, r, 4, round(len(gp) / len(g), 2) if g else "", bold=True, sz=10, fc="FF00008B", bg=CPB, fmt="0%")
+            t3rc = top3_str(gr, 'concept', 3); t3pc = top3_str(gp, 'concept', 3); t3f = top3_str(g, 'form', 3)
+            for i, cn in enumerate([5, 6, 7]): sc(ws, r, cn, t3rc[i], sz=9, bg=CRB, wrap=True)
+            for i, cn in enumerate([8, 9, 10]): sc(ws, r, cn, t3pc[i], sz=9, bg=CPB, wrap=True)
+            for i, cn in enumerate([11, 12, 13]): sc(ws, r, cn, t3f[i], sz=9, bg="FFEDE7F6", wrap=True)
+        if not ranked:
+            ws.merge_cells(f"A3:{gcl(NC)}3")
+            c = ws.cell(row=3, column=1, value="Not enough tagged data for this section.")
+            c.font = Font(name=FN, sz=10, italic=True, color=CDG); c.alignment = Alignment(horizontal="center")
+        ws.freeze_panes = "B3"
+
+    ws13 = wb2.create_sheet("13. Form Family Tendencies")
+    group_tab(ws13, 'form_family', "FORM FAMILY TENDENCIES  \u2014  Run/Pass Split, Favorite Plays & Formations",
+              "FF6C3483", "6C3483")
+
+    ws14 = wb2.create_sheet("14. FIB Tendencies")
+    group_tab(ws14, 'fib', "FIB TENDENCIES  \u2014  Run/Pass Split, Favorite Plays & Formations",
+              "FF784212", "784212", empty_label="Not FIB")
 
     buf = io.BytesIO(); wb2.save(buf); buf.seek(0)
     return buf.getvalue()
