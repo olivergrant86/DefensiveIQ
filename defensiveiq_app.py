@@ -788,7 +788,7 @@ def build_excel(plays, opp, week, date):
     ws6.freeze_panes = "B3"
 
     # ── Tab 7 / 8: Concept-level analysis (Run / Pass) ───────
-    def concept_tab(ws, rp_filter, title, accent, min_n=3):
+    def concept_tab(ws, rp_filter, title, accent, min_n=1):
         ws.sheet_view.showGridLines = False
         NC = 13
         widths(ws, [20, 8, 8, 8, 8, 8, 8, 10, 10, 10, 10, 20, 8])
@@ -846,10 +846,10 @@ def build_excel(plays, opp, week, date):
         ws.freeze_panes = "B3"
 
     ws7 = wb2.create_sheet("7. Run Concepts"); ws7.sheet_properties.tabColor = "C0392B"
-    concept_tab(ws7, "Run", "RUN CONCEPTS  \u2014  Explosive (10+) & Success Rate by Concept (3+ calls)", "FFC0392B")
+    concept_tab(ws7, "Run", "RUN CONCEPTS  \u2014  Explosive (10+) & Success Rate by Concept (All Calls)", "FFC0392B")
 
     ws8 = wb2.create_sheet("8. Pass Concepts"); ws8.sheet_properties.tabColor = "1A5276"
-    concept_tab(ws8, "Pass", "PASS CONCEPTS  \u2014  Explosive (15+) & Success Rate by Concept (3+ calls)", "FF1A5276")
+    concept_tab(ws8, "Pass", "PASS CONCEPTS  \u2014  Explosive (15+) & Success Rate by Concept (All Calls)", "FF1A5276")
 
     # ── Tab 9: Formation Tendencies ───────────────────────────
     ws9 = wb2.create_sheet("9. Formation Tendencies")
