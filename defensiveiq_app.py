@@ -42,6 +42,9 @@ COLUMN_ALIASES = {
     "MOTION":      ["MOTION", "MOT", "MOTION DIR"],
     "FORM FAMILY": ["FORM FAMILY", "FORMATION FAMILY", "FAMILY"],
     "FIB":         ["FIB"],
+    "PASSER":      ["OPP PASSER", "PASSER", "QB", "QUARTERBACK"],
+    "RUSHER":      ["OPP RUSHER", "RUSHER", "BALL CARRIER", "BALLCARRIER", "RB"],
+    "RECEIVER":    ["OPP RECEIVER", "RECEIVER", "TARGET", "WR"],
 }
 
 def _normalize(s):
@@ -197,6 +200,9 @@ def load_plays(df):
             'td':    is_td,
             'form_family': str(row.get('FORM FAMILY', '')).strip(),
             'fib':   str(row.get('FIB', '')).strip(),
+            'passer':   row.get('PASSER', ''),
+            'rusher':   row.get('RUSHER', ''),
+            'receiver': row.get('RECEIVER', ''),
         })
     return plays
 
@@ -306,6 +312,71 @@ def compute_heavy_pass_situations(plays):
     if len(sl) >= 3:
         heavy.append(f"2nd & 10+: {pct(len([p for p in sl if p['rp']=='Pass']), len(sl))}% Pass")
     return heavy
+
+def _jersey(v):
+    """Format a raw passer/rusher/receiver cell as a display label like '#12'."""
+    s = str(v).strip()
+    if s in ('', 'nan', 'None'): return None
+    try:
+        f = float(s)
+        return f"#{int(f)}"
+    except (TypeError, ValueError):
+        return f"#{s}"
+
+def compute_player_stats(plays):
+    """Build Passing / Rushing / Receiving stat lines per player from
+    the RESULT text and the PASSER/RUSHER/RECEIVER columns. Handles
+    whatever casing/wording the film uses, and leaves Fum/Int/Drop at
+    0 (rendered as '-') when the export doesn't tag those events."""
+    passing, rushing, receiving = {}, {}, {}
+
+    for p in plays:
+        result_u = p['result'].upper()
+        is_incomplete = 'INCOMPLETE' in result_u
+        is_complete = ('COMPLETE' in result_u) and not is_incomplete
+        is_int = 'INT' in result_u
+        is_fum = 'FUM' in result_u
+        is_drop = 'DROP' in result_u
+        is_td = p['td']
+
+        if p['rp'] == 'Pass':
+            passer = _jersey(p.get('passer', ''))
+            if passer:
+                d = passing.setdefault(passer, {'att': 0, 'cmp': 0, 'yds': 0, 'td': 0,
+                                                 'int': 0, 'fum': 0, 'lng': None})
+                if is_complete or is_incomplete or is_int:
+                    d['att'] += 1
+                if is_complete:
+                    d['cmp'] += 1
+                    d['yds'] += p['gnls']
+                    if is_td: d['td'] += 1
+                    if d['lng'] is None or p['gnls'] > d['lng']: d['lng'] = p['gnls']
+                if is_int: d['int'] += 1
+                if is_fum: d['fum'] += 1
+
+            receiver = _jersey(p.get('receiver', ''))
+            if receiver:
+                d = receiving.setdefault(receiver, {'rec': 0, 'yds': 0, 'td': 0,
+                                                      'fum': 0, 'drop': 0, 'lng': None})
+                if is_complete:
+                    d['rec'] += 1
+                    d['yds'] += p['gnls']
+                    if is_td: d['td'] += 1
+                    if d['lng'] is None or p['gnls'] > d['lng']: d['lng'] = p['gnls']
+                if is_drop: d['drop'] += 1
+                if is_fum: d['fum'] += 1
+
+        elif p['rp'] == 'Run':
+            rusher = _jersey(p.get('rusher', ''))
+            if rusher:
+                d = rushing.setdefault(rusher, {'att': 0, 'yds': 0, 'td': 0, 'fum': 0, 'lng': None})
+                d['att'] += 1
+                d['yds'] += p['gnls']
+                if d['lng'] is None or p['gnls'] > d['lng']: d['lng'] = p['gnls']
+                if is_td: d['td'] += 1
+                if is_fum: d['fum'] += 1
+
+    return passing, rushing, receiving
 
 # ── PowerPoint scouting deck (defensive game-plan for a DC) ────
 P_NAVY = RGBColor(0x16, 0x21, 0x3E); P_RED = RGBColor(0xC0, 0x39, 0x2B)
@@ -1152,6 +1223,94 @@ def build_excel(plays, opp, week, date):
     ws14 = wb2.create_sheet("14. FIB Tendencies")
     group_tab(ws14, 'fib', "FIB TENDENCIES  \u2014  Run/Pass Split, Favorite Plays & Formations",
               "FF784212", "784212", empty_label="Not FIB")
+
+    # ── Tab 15: Stats (Passing / Rushing / Receiving) ──────────
+    ws15 = wb2.create_sheet("15. Stats")
+    ws15.sheet_properties.tabColor = "16213E"; ws15.sheet_view.showGridLines = False
+    NC15 = 11
+    widths(ws15, [10, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8])
+
+    passing, rushing, receiving = compute_player_stats(plays)
+
+    def _dash(n):
+        return n if n else "—"
+
+    row = 1
+    banner(ws15, row, "PASSING", NC15, bg=CR, sz=13, ht=26); row += 1
+    for c, txt in enumerate(["Player", "Cmp", "Att", "%", "Yds", "Y/C", "Lng", "TD", "Fum", "Int", "Rat"], 1):
+        hdr(ws15, row, c, txt, bg=CB, sz=9)
+    row += 1
+    pass_ranked = sorted(passing.items(), key=lambda kv: -kv[1]['yds'])
+    for ri, (player, d) in enumerate(pass_ranked):
+        bg = CL if ri % 2 == 0 else CW
+        att, cmp_, yds, td, intc, fum = d['att'], d['cmp'], d['yds'], d['td'], d['int'], d['fum']
+        rating = (8.4 * yds + 330 * td + 100 * cmp_ - 200 * intc) / att if att else 0
+        sc(ws15, row, 1, player, bold=True, sz=10, fc=CW, bg=CBl, h="left")
+        sc(ws15, row, 2, cmp_, sz=9, bg=bg, fmt="0")
+        sc(ws15, row, 3, att, sz=9, bg=bg, fmt="0")
+        sc(ws15, row, 4, round(cmp_ / att, 3) if att else "", sz=9, bg=bg, fmt="0.0%")
+        sc(ws15, row, 5, yds, bold=True, sz=9, fc="FF0E7060", bg="FFE8F8E8", fmt="0")
+        sc(ws15, row, 6, round(yds / cmp_, 1) if cmp_ else "", sz=9, bg=bg, fmt="0.0")
+        sc(ws15, row, 7, d['lng'] if d['lng'] is not None else "", sz=9, bg=bg, fmt="0")
+        sc(ws15, row, 8, _dash(td), sz=9, bg=bg, fmt="0" if td else "General")
+        sc(ws15, row, 9, _dash(fum), sz=9, bg=bg, fmt="0" if fum else "General")
+        sc(ws15, row, 10, _dash(intc), sz=9, bg=bg, fmt="0" if intc else "General")
+        sc(ws15, row, 11, round(rating, 1), bold=True, sz=9, fc="FFC0392B", bg=CRB, fmt="0.0")
+        row += 1
+    if not pass_ranked:
+        ws15.merge_cells(start_row=row, start_column=1, end_row=row, end_column=NC15)
+        c = ws15.cell(row=row, column=1, value="No passer data tagged (OPP PASSER column).")
+        c.font = Font(name=FN, sz=9, italic=True, color=CDG); c.alignment = Alignment(horizontal="center")
+        row += 1
+    row += 1
+
+    banner(ws15, row, "RUSHING", NC15, bg=CR, sz=13, ht=26); row += 1
+    for c, txt in enumerate(["Player", "Att", "Yds", "Avg", "Lng", "TD", "Fum"], 1):
+        hdr(ws15, row, c, txt, bg=CB, sz=9)
+    row += 1
+    rush_ranked = sorted(rushing.items(), key=lambda kv: -kv[1]['yds'])
+    for ri, (player, d) in enumerate(rush_ranked):
+        bg = CL if ri % 2 == 0 else CW
+        att, yds, td, fum = d['att'], d['yds'], d['td'], d['fum']
+        sc(ws15, row, 1, player, bold=True, sz=10, fc=CW, bg=CR, h="left")
+        sc(ws15, row, 2, att, sz=9, bg=bg, fmt="0")
+        sc(ws15, row, 3, yds, bold=True, sz=9, fc="FF0E7060", bg="FFE8F8E8", fmt="0")
+        sc(ws15, row, 4, round(yds / att, 1) if att else "", sz=9, bg=bg, fmt="0.0")
+        sc(ws15, row, 5, d['lng'] if d['lng'] is not None else "", sz=9, bg=bg, fmt="0")
+        sc(ws15, row, 6, _dash(td), sz=9, bg=bg, fmt="0" if td else "General")
+        sc(ws15, row, 7, _dash(fum), sz=9, bg=bg, fmt="0" if fum else "General")
+        row += 1
+    if not rush_ranked:
+        ws15.merge_cells(start_row=row, start_column=1, end_row=row, end_column=NC15)
+        c = ws15.cell(row=row, column=1, value="No rusher data tagged (OPP RUSHER column).")
+        c.font = Font(name=FN, sz=9, italic=True, color=CDG); c.alignment = Alignment(horizontal="center")
+        row += 1
+    row += 1
+
+    banner(ws15, row, "RECEIVING", NC15, bg=CR, sz=13, ht=26); row += 1
+    for c, txt in enumerate(["Player", "Rec", "Yds", "Avg", "Lng", "TD", "Fum", "Drop"], 1):
+        hdr(ws15, row, c, txt, bg=CB, sz=9)
+    row += 1
+    rec_ranked = sorted(receiving.items(), key=lambda kv: -kv[1]['yds'])
+    for ri, (player, d) in enumerate(rec_ranked):
+        bg = CL if ri % 2 == 0 else CW
+        rec, yds, td, fum, drop = d['rec'], d['yds'], d['td'], d['fum'], d['drop']
+        sc(ws15, row, 1, player, bold=True, sz=10, fc=CW, bg=CBl, h="left")
+        sc(ws15, row, 2, rec, sz=9, bg=bg, fmt="0")
+        sc(ws15, row, 3, yds, bold=True, sz=9, fc="FF0E7060", bg="FFE8F8E8", fmt="0")
+        sc(ws15, row, 4, round(yds / rec, 1) if rec else "", sz=9, bg=bg, fmt="0.0")
+        sc(ws15, row, 5, d['lng'] if d['lng'] is not None else "", sz=9, bg=bg, fmt="0")
+        sc(ws15, row, 6, _dash(td), sz=9, bg=bg, fmt="0" if td else "General")
+        sc(ws15, row, 7, _dash(fum), sz=9, bg=bg, fmt="0" if fum else "General")
+        sc(ws15, row, 8, _dash(drop), sz=9, bg=bg, fmt="0" if drop else "General")
+        row += 1
+    if not rec_ranked:
+        ws15.merge_cells(start_row=row, start_column=1, end_row=row, end_column=NC15)
+        c = ws15.cell(row=row, column=1, value="No receiver data tagged (OPP RECEIVER column).")
+        c.font = Font(name=FN, sz=9, italic=True, color=CDG); c.alignment = Alignment(horizontal="center")
+        row += 1
+
+    ws15.freeze_panes = "A2"
 
     buf = io.BytesIO(); wb2.save(buf); buf.seek(0)
     return buf.getvalue()
