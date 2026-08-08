@@ -45,6 +45,7 @@ COLUMN_ALIASES = {
     "PASSER":      ["OPP PASSER", "PASSER", "QB", "QUARTERBACK"],
     "RUSHER":      ["OPP RUSHER", "RUSHER", "BALL CARRIER", "BALLCARRIER", "RB"],
     "RECEIVER":    ["OPP RECEIVER", "RECEIVER", "TARGET", "WR"],
+    "BACK DEPTH":  ["BACK DEPTH", "BACKDEPTH", "DEPTH"],
 }
 
 def _normalize(s):
@@ -203,6 +204,7 @@ def load_plays(df):
             'passer':   row.get('PASSER', ''),
             'rusher':   row.get('RUSHER', ''),
             'receiver': row.get('RECEIVER', ''),
+            'back_depth': str(row.get('BACK DEPTH', '')).strip(),
         })
     return plays
 
@@ -1224,8 +1226,12 @@ def build_excel(plays, opp, week, date):
     group_tab(ws14, 'fib', "FIB TENDENCIES  \u2014  Run/Pass Split, Favorite Plays & Formations",
               "FF784212", "784212", empty_label="Not FIB")
 
+    ws14b = wb2.create_sheet("15. Back Depth")
+    group_tab(ws14b, 'back_depth', "BACK DEPTH TENDENCIES  \u2014  Run/Pass Split, Favorite Plays & Formations",
+              "FF0E7060", "0E7060", empty_label="(Blank)")
+
     # ── Tab 15: Stats (Passing / Rushing / Receiving) ──────────
-    ws15 = wb2.create_sheet("15. Stats")
+    ws15 = wb2.create_sheet("16. Stats")
     ws15.sheet_properties.tabColor = "16213E"; ws15.sheet_view.showGridLines = False
     NC15 = 11
     widths(ws15, [10, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8])
