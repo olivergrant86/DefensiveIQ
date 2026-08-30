@@ -499,40 +499,6 @@ def build_pptx(plays, opp, week, date, primary_hex="#16213E", accent_hex="#C0392
         _p_text(s, Inches(1.05), yy, Inches(11), Inches(0.4), txt, 16, P_BLACK, bold=True)
         yy += Inches(0.5)
 
-    # SLIDE 3/4 — Run & Pass Tendencies by Zone
-    def zone_matchup_slide(title, rp_filter, concept_label, extra_label, extra_key, color):
-        s = _p_slide(prs, P_WHITE)
-        _p_text(s, Inches(0.6), Inches(0.4), Inches(12), Inches(0.8), title, 34, color, bold=True, font="Cambria")
-        _p_text(s, Inches(0.6), Inches(1.1), Inches(12), Inches(0.4),
-                "How they attack by field position.", 12, P_DGRAY, italic=True)
-        rows = [[("ZONE", {'bg': color, 'fc': P_WHITE, 'bold': True}),
-                 ("SNAPS", {'bg': color, 'fc': P_WHITE, 'bold': True, 'align': PP_ALIGN.CENTER}),
-                 ("% OF TOTAL", {'bg': color, 'fc': P_WHITE, 'bold': True, 'align': PP_ALIGN.CENTER}),
-                 ("YDS/PLAY", {'bg': color, 'fc': P_WHITE, 'bold': True, 'align': PP_ALIGN.CENTER}),
-                 (f"TOP {concept_label}", {'bg': color, 'fc': P_WHITE, 'bold': True}),
-                 (f"TOP {extra_label}", {'bg': color, 'fc': P_WHITE, 'bold': True})]]
-        for i, z in enumerate(ZONE_LIST):
-            zp = [p for p in plays if p['zone'] == z and p['rp'] == rp_filter]
-            if not zp: continue
-            bg = P_LGRAY if i % 2 == 0 else P_WHITE
-            t1 = top3(zp, 'concept', 1); t2 = top3(zp, extra_key, 1)
-            rows.append([(f"{z} \u00b7 {ZONE_NAMES[z]}", {'bg': bg, 'bold': True, 'size': 10}),
-                         (str(len(zp)), {'bg': bg, 'align': PP_ALIGN.CENTER}),
-                         (f"{pct(len(zp), len(plays))}%", {'bg': bg, 'align': PP_ALIGN.CENTER}),
-                         (f"{_avg(zp):.1f}", {'bg': bg, 'fc': P_TEAL, 'bold': True, 'align': PP_ALIGN.CENTER}),
-                         (fmt_top(t1, 0), {'bg': bg, 'size': 10}),
-                         (fmt_top(t2, 0), {'bg': bg, 'size': 10})])
-        if len(rows) == 1:
-            _p_text(s, Inches(0.6), Inches(2), Inches(12), Inches(0.5),
-                    "Not enough data for this section.", 14, P_DGRAY, italic=True)
-        else:
-            _p_table(s, Inches(0.6), Inches(1.7), Inches(12.1), rows,
-                     [Inches(3.6), Inches(1.6), Inches(1.7), Inches(1.7), Inches(2.7), Inches(2.7)],
-                     row_h=Inches(0.55))
-
-    zone_matchup_slide("RUN TENDENCIES BY ZONE", "Run", "RUN CONCEPT", "FORMATION", 'form', P_RED)
-    zone_matchup_slide("PASS TENDENCIES BY ZONE", "Pass", "PASS CONCEPT", "FORMATION", 'form', P_BLUE)
-
     # SLIDE 5 — Formation Tendencies
     s = _p_slide(prs, P_WHITE)
     _p_text(s, Inches(0.6), Inches(0.4), Inches(12), Inches(0.8),
@@ -588,31 +554,239 @@ def build_pptx(plays, opp, week, date, primary_hex="#16213E", accent_hex="#C0392
     _p_table(s, Inches(0.6), Inches(1.5), Inches(12.1), rows,
              [Inches(2.7), Inches(1.5), Inches(1.5), Inches(1.5), Inches(2.45), Inches(2.45)], row_h=Inches(0.47))
 
-    # SLIDE 7 — Defensive game plan (dark closer)
+    # ── Helper: concept-level detail for the Top Concepts slide ──
+    def _concept_detail(rp_filter, n=5):
+        grp = {}
+        for p in plays:
+            if p['rp'] != rp_filter: continue
+            c = str(p['concept']).strip()
+            if c in ('', 'nan', 'None'): continue
+            grp.setdefault(c, []).append(p)
+        ranked = sorted(grp.items(), key=lambda kv: -len(kv[1]))[:n]
+        out = []
+        for concept, g in ranked:
+            expl_pct = len([p for p in g if p['expl']]) / len(g) if g else 0
+            sr = _sr(g)
+            tf = top3(g, 'form', 1)
+            out.append((concept, len(g), _avg(g), expl_pct, sr, tf[0]['v'] if tf else "—"))
+        return out
+
+    # ── Helper: group breakdown (Form Family / FIB) for its slide ──
+    def _group_detail(key, empty_label, n=None):
+        groups = {}
+        for p in plays:
+            v = str(p.get(key, '')).strip()
+            if v in ('', 'nan', 'None'): v = empty_label
+            groups.setdefault(v, []).append(p)
+        ranked = sorted(groups.items(), key=lambda kv: -len(kv[1]))
+        total_groups = len(ranked)
+        if n: ranked = ranked[:n]
+        out = []
+        for v, g in ranked:
+            gr = [p for p in g if p['rp'] == 'Run']; gp = [p for p in g if p['rp'] == 'Pass']
+            out.append((v, len(g), len(gr) / len(g) if g else 0, len(gp) / len(g) if g else 0,
+                        fmt_top(top3(gr, 'concept', 1), 0), fmt_top(top3(gp, 'concept', 1), 0),
+                        fmt_top(top3(g, 'form', 1), 0)))
+        return out, total_groups
+
+    # SLIDE 7 — Top Run & Pass Concepts (detailed)
+    s = _p_slide(prs, P_WHITE)
+    _p_text(s, Inches(0.6), Inches(0.4), Inches(12), Inches(0.7),
+            "TOP RUN & PASS CONCEPTS", 32, RGBColor(0x4A, 0x23, 0x5A), bold=True, font="Cambria")
+
+    def _concept_table(y, title_txt, rp_filter, color):
+        _p_text(s, Inches(0.6), y, Inches(12), Inches(0.35), title_txt, 16, color, bold=True)
+        data = _concept_detail(rp_filter, 5)
+        rows = [[("CONCEPT", {'bg': color, 'fc': P_WHITE, 'bold': True}),
+                 ("CALLED", {'bg': color, 'fc': P_WHITE, 'bold': True, 'align': PP_ALIGN.CENTER}),
+                 ("AVG YD", {'bg': color, 'fc': P_WHITE, 'bold': True, 'align': PP_ALIGN.CENTER}),
+                 ("EXPL%", {'bg': color, 'fc': P_WHITE, 'bold': True, 'align': PP_ALIGN.CENTER}),
+                 ("SUCC%", {'bg': color, 'fc': P_WHITE, 'bold': True, 'align': PP_ALIGN.CENTER}),
+                 ("TOP FORM", {'bg': color, 'fc': P_WHITE, 'bold': True})]]
+        for i, (concept, called, avg, expl, succ, form) in enumerate(data):
+            bg = P_LGRAY if i % 2 == 0 else P_WHITE
+            rows.append([(concept, {'bg': bg, 'bold': True, 'size': 11}),
+                         (str(called), {'bg': bg, 'align': PP_ALIGN.CENTER}),
+                         (f"{avg:.1f}", {'bg': bg, 'fc': P_TEAL, 'bold': True, 'align': PP_ALIGN.CENTER}),
+                         (f"{round(expl*100)}%", {'bg': bg, 'align': PP_ALIGN.CENTER}),
+                         (f"{succ}%" if succ is not None else "—", {'bg': bg, 'align': PP_ALIGN.CENTER}),
+                         (form, {'bg': bg, 'size': 11})])
+        if len(rows) == 1:
+            _p_text(s, Inches(0.6), y + Inches(0.4), Inches(12), Inches(0.4),
+                    "Not enough tagged data.", 13, P_DGRAY, italic=True)
+            return
+        _p_table(s, Inches(0.6), y + Inches(0.4), Inches(12.1), rows,
+                 [Inches(3.2), Inches(1.6), Inches(1.6), Inches(1.6), Inches(1.6), Inches(2.5)],
+                 row_h=Inches(0.4))
+
+    _concept_table(Inches(1.1), "TOP 5 RUN CONCEPTS", "Run", P_RED)
+    _concept_table(Inches(4.15), "TOP 5 PASS CONCEPTS", "Pass", P_BLUE)
+
+    # SLIDE 8 — Top 5 Biggest Tendencies
     s = _p_slide(prs, PRIMARY)
     _p_text(s, Inches(0.6), Inches(0.4), Inches(12), Inches(0.8),
-            "DEFENSIVE GAME PLAN — KEY ALERTS", 32, ACCENT_ON_PRIMARY, bold=True, font="Cambria")
-    alerts = compute_biggest_tendencies(plays, top_n=6)
-    form_alerts = compute_formation_alerts(plays, top_n=4)
-    heavy = compute_heavy_pass_situations(plays)
-    yy = Inches(1.5)
-    for txt in alerts[:5]:
-        _p_rect(s, Inches(0.8), yy, Inches(0.22), Inches(0.5), P_RED)
-        _p_text(s, Inches(1.15), yy, Inches(11), Inches(0.5), txt, 15, P_WHITE, bold=True, anchor=MSO_ANCHOR.MIDDLE)
-        yy += Inches(0.55)
-    yy += Inches(0.15)
-    if form_alerts:
-        _p_text(s, Inches(0.8), yy, Inches(6), Inches(0.4), "FORMATION ALERTS", 14, ACCENT_ON_PRIMARY, bold=True)
-        yy += Inches(0.4)
-        for f, tag in form_alerts:
-            _p_text(s, Inches(0.9), yy, Inches(11), Inches(0.35), f"{f}: {tag}", 12, RGBColor(0xCA, 0xDC, 0xFC))
-            yy += Inches(0.34)
-    if not alerts and not form_alerts:
+            "TOP 5 BIGGEST TENDENCIES", 32, ACCENT_ON_PRIMARY, bold=True, font="Cambria")
+    big5 = compute_biggest_tendencies(plays, top_n=5)
+    yy = Inches(1.6)
+    for i, txt in enumerate(big5):
+        _p_rect(s, Inches(0.8), yy, Inches(0.5), Inches(0.55), ACCENT)
+        _p_text(s, Inches(0.8), yy, Inches(0.5), Inches(0.55), str(i + 1), 20, P_WHITE,
+                bold=True, align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE)
+        _p_text(s, Inches(1.45), yy, Inches(10.8), Inches(0.55), txt, 17, P_WHITE, bold=True, anchor=MSO_ANCHOR.MIDDLE)
+        yy += Inches(0.85)
+    if not big5:
         _p_text(s, Inches(0.8), Inches(2), Inches(11), Inches(0.5),
-                "Not enough tagged snaps to compute alerts yet.", 14, RGBColor(0x8A, 0x9A, 0xBA), italic=True)
+                "Not enough tagged snaps to compute tendencies yet.", 14, RGBColor(0x8A, 0x9A, 0xBA), italic=True)
     _p_text(s, Inches(0.6), Inches(6.95), Inches(12), Inches(0.4),
-            "Alerts require a minimum sample size — verify against film before installing.", 10,
+            "Tendencies require a minimum sample size — verify against film before installing.", 10,
             RGBColor(0x8A, 0x9A, 0xBA), italic=True)
+
+    # SLIDE 9 — Form Family & FIB Tendencies
+    s = _p_slide(prs, P_WHITE)
+    _p_text(s, Inches(0.6), Inches(0.4), Inches(12), Inches(0.7),
+            "FORM FAMILY & FIB TENDENCIES", 30, RGBColor(0x6C, 0x34, 0x83), bold=True, font="Cambria")
+
+    def _group_table(y, title_txt, key, empty_label, color, n=None):
+        _p_text(s, Inches(0.6), y, Inches(12), Inches(0.35), title_txt, 16, color, bold=True)
+        data, total_groups = _group_detail(key, empty_label, n)
+        rows = [[("GROUP", {'bg': color, 'fc': P_WHITE, 'bold': True}),
+                 ("SNAPS", {'bg': color, 'fc': P_WHITE, 'bold': True, 'align': PP_ALIGN.CENTER}),
+                 ("RUN%", {'bg': color, 'fc': P_WHITE, 'bold': True, 'align': PP_ALIGN.CENTER}),
+                 ("PASS%", {'bg': color, 'fc': P_WHITE, 'bold': True, 'align': PP_ALIGN.CENTER}),
+                 ("TOP RUN", {'bg': color, 'fc': P_WHITE, 'bold': True}),
+                 ("TOP PASS", {'bg': color, 'fc': P_WHITE, 'bold': True}),
+                 ("TOP FORM", {'bg': color, 'fc': P_WHITE, 'bold': True})]]
+        for i, (v, snaps, runp, passp, toprun, toppass, topform) in enumerate(data):
+            bg = P_LGRAY if i % 2 == 0 else P_WHITE
+            rows.append([(v, {'bg': bg, 'bold': True, 'size': 10}),
+                         (str(snaps), {'bg': bg, 'align': PP_ALIGN.CENTER}),
+                         (f"{round(runp*100)}%", {'bg': bg, 'fc': P_RED, 'bold': True, 'align': PP_ALIGN.CENTER}),
+                         (f"{round(passp*100)}%", {'bg': bg, 'fc': P_BLUE, 'bold': True, 'align': PP_ALIGN.CENTER}),
+                         (toprun, {'bg': bg, 'size': 9}),
+                         (toppass, {'bg': bg, 'size': 9}),
+                         (topform, {'bg': bg, 'size': 9})])
+        if len(rows) == 1:
+            _p_text(s, Inches(0.6), y + Inches(0.4), Inches(12), Inches(0.4),
+                    "Not enough tagged data.", 13, P_DGRAY, italic=True)
+            return
+        _p_table(s, Inches(0.6), y + Inches(0.4), Inches(12.1), rows,
+                 [Inches(2.0), Inches(1.2), Inches(1.2), Inches(1.2), Inches(2.15), Inches(2.15), Inches(2.2)],
+                 row_h=Inches(0.38))
+        if n and total_groups > n:
+            _p_text(s, Inches(0.6), y + Inches(0.4) + Inches(0.38) * len(rows), Inches(12), Inches(0.3),
+                    f"+ {total_groups - n} more — see the Form Family / FIB tabs in the workbook.", 10, P_DGRAY, italic=True)
+
+    _group_table(Inches(1.1), "FORM FAMILY", 'form_family', "(Blank)", RGBColor(0x6C, 0x34, 0x83), n=6)
+    _group_table(Inches(4.7), "FIB", 'fib', "Not FIB", RGBColor(0x78, 0x42, 0x12))
+
+    # SLIDE 10 — Stats (Passing / Rushing / Receiving)
+    s = _p_slide(prs, P_WHITE)
+    _p_text(s, Inches(0.6), Inches(0.35), Inches(12), Inches(0.6),
+            "PLAYER STATS", 32, PRIMARY, bold=True, font="Cambria")
+    passing, rushing, receiving = compute_player_stats(plays)
+
+    def _dash(val):
+        return str(val) if val else "—"
+
+    yy = Inches(1.0)
+    _p_text(s, Inches(0.6), yy, Inches(12), Inches(0.3), "PASSING", 14, P_RED, bold=True)
+    yy += Inches(0.3)
+    pass_all = sorted(passing.items(), key=lambda kv: -kv[1]['yds'])
+    pass_ranked = pass_all[:3]
+    if pass_ranked:
+        rows = [[("PLAYER", {'bg': P_RED, 'fc': P_WHITE, 'bold': True}),
+                 ("CMP", {'bg': P_RED, 'fc': P_WHITE, 'bold': True, 'align': PP_ALIGN.CENTER}),
+                 ("ATT", {'bg': P_RED, 'fc': P_WHITE, 'bold': True, 'align': PP_ALIGN.CENTER}),
+                 ("%", {'bg': P_RED, 'fc': P_WHITE, 'bold': True, 'align': PP_ALIGN.CENTER}),
+                 ("YDS", {'bg': P_RED, 'fc': P_WHITE, 'bold': True, 'align': PP_ALIGN.CENTER}),
+                 ("TD", {'bg': P_RED, 'fc': P_WHITE, 'bold': True, 'align': PP_ALIGN.CENTER}),
+                 ("INT", {'bg': P_RED, 'fc': P_WHITE, 'bold': True, 'align': PP_ALIGN.CENTER}),
+                 ("RAT", {'bg': P_RED, 'fc': P_WHITE, 'bold': True, 'align': PP_ALIGN.CENTER})]]
+        for i, (player, d) in enumerate(pass_ranked):
+            bg = P_LGRAY if i % 2 == 0 else P_WHITE
+            att, cmp_, yds, td, intc = d['att'], d['cmp'], d['yds'], d['td'], d['int']
+            rating = (8.4 * yds + 330 * td + 100 * cmp_ - 200 * intc) / att if att else 0
+            rows.append([(player, {'bg': bg, 'bold': True}),
+                         (str(cmp_), {'bg': bg, 'align': PP_ALIGN.CENTER}),
+                         (str(att), {'bg': bg, 'align': PP_ALIGN.CENTER}),
+                         (f"{round(cmp_/att*100) if att else 0}%", {'bg': bg, 'align': PP_ALIGN.CENTER}),
+                         (str(yds), {'bg': bg, 'fc': P_TEAL, 'bold': True, 'align': PP_ALIGN.CENTER}),
+                         (_dash(td), {'bg': bg, 'align': PP_ALIGN.CENTER}),
+                         (_dash(intc), {'bg': bg, 'align': PP_ALIGN.CENTER}),
+                         (f"{rating:.1f}", {'bg': bg, 'fc': P_RED, 'bold': True, 'align': PP_ALIGN.CENTER})])
+        _p_table(s, Inches(0.6), yy, Inches(12.1), rows,
+                 [Inches(2.4), Inches(1.2), Inches(1.2), Inches(1.4), Inches(1.5), Inches(1.2), Inches(1.2), Inches(2.0)],
+                 row_h=Inches(0.3))
+        yy += Inches(0.3) * len(rows)
+        if len(pass_all) > len(pass_ranked):
+            _p_text(s, Inches(0.6), yy, Inches(12), Inches(0.22),
+                    f"+ {len(pass_all) - len(pass_ranked)} more — see the Stats tab in the workbook.", 9, P_DGRAY, italic=True)
+        yy += Inches(0.22) + Inches(0.15)
+    else:
+        _p_text(s, Inches(0.6), yy, Inches(12), Inches(0.3), "No passer data tagged.", 12, P_DGRAY, italic=True)
+        yy += Inches(0.37)
+
+    _p_text(s, Inches(0.6), yy, Inches(12), Inches(0.3), "RUSHING", 14, P_RED, bold=True)
+    yy += Inches(0.3)
+    rush_all = sorted(rushing.items(), key=lambda kv: -kv[1]['yds'])
+    rush_ranked = rush_all[:4]
+    if rush_ranked:
+        rows = [[("PLAYER", {'bg': P_RED, 'fc': P_WHITE, 'bold': True}),
+                 ("ATT", {'bg': P_RED, 'fc': P_WHITE, 'bold': True, 'align': PP_ALIGN.CENTER}),
+                 ("YDS", {'bg': P_RED, 'fc': P_WHITE, 'bold': True, 'align': PP_ALIGN.CENTER}),
+                 ("AVG", {'bg': P_RED, 'fc': P_WHITE, 'bold': True, 'align': PP_ALIGN.CENTER}),
+                 ("LNG", {'bg': P_RED, 'fc': P_WHITE, 'bold': True, 'align': PP_ALIGN.CENTER}),
+                 ("TD", {'bg': P_RED, 'fc': P_WHITE, 'bold': True, 'align': PP_ALIGN.CENTER})]]
+        for i, (player, d) in enumerate(rush_ranked):
+            bg = P_LGRAY if i % 2 == 0 else P_WHITE
+            att, yds, td, lng = d['att'], d['yds'], d['td'], d['lng']
+            rows.append([(player, {'bg': bg, 'bold': True}),
+                         (str(att), {'bg': bg, 'align': PP_ALIGN.CENTER}),
+                         (str(yds), {'bg': bg, 'fc': P_TEAL, 'bold': True, 'align': PP_ALIGN.CENTER}),
+                         (f"{yds/att:.1f}" if att else "—", {'bg': bg, 'align': PP_ALIGN.CENTER}),
+                         (str(lng) if lng is not None else "—", {'bg': bg, 'align': PP_ALIGN.CENTER}),
+                         (_dash(td), {'bg': bg, 'align': PP_ALIGN.CENTER})])
+        _p_table(s, Inches(0.6), yy, Inches(12.1), rows,
+                 [Inches(3.0), Inches(1.6), Inches(1.9), Inches(1.9), Inches(1.7), Inches(2.0)],
+                 row_h=Inches(0.3))
+        yy += Inches(0.3) * len(rows)
+        if len(rush_all) > len(rush_ranked):
+            _p_text(s, Inches(0.6), yy, Inches(12), Inches(0.22),
+                    f"+ {len(rush_all) - len(rush_ranked)} more — see the Stats tab in the workbook.", 9, P_DGRAY, italic=True)
+        yy += Inches(0.22) + Inches(0.15)
+    else:
+        _p_text(s, Inches(0.6), yy, Inches(12), Inches(0.3), "No rusher data tagged.", 12, P_DGRAY, italic=True)
+        yy += Inches(0.37)
+
+    _p_text(s, Inches(0.6), yy, Inches(12), Inches(0.3), "RECEIVING", 14, P_BLUE, bold=True)
+    yy += Inches(0.3)
+    rec_all = sorted(receiving.items(), key=lambda kv: -kv[1]['yds'])
+    rec_ranked = rec_all[:5]
+    if rec_ranked:
+        rows = [[("PLAYER", {'bg': P_BLUE, 'fc': P_WHITE, 'bold': True}),
+                 ("REC", {'bg': P_BLUE, 'fc': P_WHITE, 'bold': True, 'align': PP_ALIGN.CENTER}),
+                 ("YDS", {'bg': P_BLUE, 'fc': P_WHITE, 'bold': True, 'align': PP_ALIGN.CENTER}),
+                 ("AVG", {'bg': P_BLUE, 'fc': P_WHITE, 'bold': True, 'align': PP_ALIGN.CENTER}),
+                 ("LNG", {'bg': P_BLUE, 'fc': P_WHITE, 'bold': True, 'align': PP_ALIGN.CENTER}),
+                 ("TD", {'bg': P_BLUE, 'fc': P_WHITE, 'bold': True, 'align': PP_ALIGN.CENTER})]]
+        for i, (player, d) in enumerate(rec_ranked):
+            bg = P_LGRAY if i % 2 == 0 else P_WHITE
+            rec, yds, td, lng = d['rec'], d['yds'], d['td'], d['lng']
+            rows.append([(player, {'bg': bg, 'bold': True}),
+                         (str(rec), {'bg': bg, 'align': PP_ALIGN.CENTER}),
+                         (str(yds), {'bg': bg, 'fc': P_TEAL, 'bold': True, 'align': PP_ALIGN.CENTER}),
+                         (f"{yds/rec:.1f}" if rec else "—", {'bg': bg, 'align': PP_ALIGN.CENTER}),
+                         (str(lng) if lng is not None else "—", {'bg': bg, 'align': PP_ALIGN.CENTER}),
+                         (_dash(td), {'bg': bg, 'align': PP_ALIGN.CENTER})])
+        _p_table(s, Inches(0.6), yy, Inches(12.1), rows,
+                 [Inches(3.0), Inches(1.6), Inches(1.9), Inches(1.9), Inches(1.7), Inches(2.0)],
+                 row_h=Inches(0.28))
+        yy += Inches(0.28) * len(rows)
+        if len(rec_all) > len(rec_ranked):
+            _p_text(s, Inches(0.6), yy, Inches(12), Inches(0.22),
+                    f"+ {len(rec_all) - len(rec_ranked)} more — see the Stats tab in the workbook.", 9, P_DGRAY, italic=True)
+    else:
+        _p_text(s, Inches(0.6), yy, Inches(12), Inches(0.3), "No receiver data tagged.", 12, P_DGRAY, italic=True)
 
     buf = io.BytesIO(); prs.save(buf); buf.seek(0)
     return buf.getvalue()
