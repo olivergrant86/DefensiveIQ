@@ -2204,13 +2204,13 @@ def build_pptx(plays, opp, week, date, primary_hex="#0D0D0D", accent_hex="#D2011
             "Tendencies require a minimum sample size — verify against film before installing.", 10,
             RGBColor(0x8A, 0x9A, 0xBA), italic=True)
 
-    # SLIDE 9 — Form Family & FIB Tendencies
+    # SLIDE 9 — Form Family / FIB / Open-Closed Tendencies
     s = _p_slide(prs, P_WHITE)
-    _p_text(s, Inches(0.6), Inches(0.4), Inches(12), Inches(0.7),
-            "FORM FAMILY & FIB TENDENCIES", 30, RGBColor(0x6C, 0x34, 0x83), bold=True, font="Cambria")
+    _p_text(s, Inches(0.6), Inches(0.35), Inches(12), Inches(0.6),
+            "TENDENCY BREAKDOWNS", 30, RGBColor(0x6C, 0x34, 0x83), bold=True, font="Cambria")
 
     def _group_table(y, title_txt, key, empty_label, color, n=None):
-        _p_text(s, Inches(0.6), y, Inches(12), Inches(0.35), title_txt, 16, color, bold=True)
+        _p_text(s, Inches(0.6), y, Inches(12), Inches(0.3), title_txt, 15, color, bold=True)
         data, total_groups = _group_detail(key, empty_label, n)
         rows = [[("GROUP", {'bg': color, 'fc': P_WHITE, 'bold': True}),
                  ("SNAPS", {'bg': color, 'fc': P_WHITE, 'bold': True, 'align': PP_ALIGN.CENTER}),
@@ -2228,19 +2228,24 @@ def build_pptx(plays, opp, week, date, primary_hex="#0D0D0D", accent_hex="#D2011
                          (toprun, {'bg': bg, 'size': 9}),
                          (toppass, {'bg': bg, 'size': 9}),
                          (topform, {'bg': bg, 'size': 9})])
+        row_h = Inches(0.32)
         if len(rows) == 1:
-            _p_text(s, Inches(0.6), y + Inches(0.4), Inches(12), Inches(0.4),
-                    "Not enough tagged data.", 13, P_DGRAY, italic=True)
-            return
-        _p_table(s, Inches(0.6), y + Inches(0.4), Inches(12.1), rows,
+            _p_text(s, Inches(0.6), y + Inches(0.35), Inches(12), Inches(0.35),
+                    "Not enough tagged data.", 12, P_DGRAY, italic=True)
+            return y + Inches(0.35) + Inches(0.35)
+        _p_table(s, Inches(0.6), y + Inches(0.35), Inches(12.1), rows,
                  [Inches(2.0), Inches(1.2), Inches(1.2), Inches(1.2), Inches(2.15), Inches(2.15), Inches(2.2)],
-                 row_h=Inches(0.38))
+                 row_h=row_h)
+        bottom = y + Inches(0.35) + row_h * len(rows)
         if n and total_groups > n:
-            _p_text(s, Inches(0.6), y + Inches(0.4) + Inches(0.38) * len(rows), Inches(12), Inches(0.3),
-                    f"+ {total_groups - n} more — see the Form Family / FIB tabs in the workbook.", 10, P_DGRAY, italic=True)
+            _p_text(s, Inches(0.6), bottom, Inches(12), Inches(0.25),
+                    f"+ {total_groups - n} more \u2014 see the workbook for the full breakdown.", 9, P_DGRAY, italic=True)
+            bottom += Inches(0.25)
+        return bottom
 
-    _group_table(Inches(1.1), "FORM FAMILY", 'form_family', "(Blank)", RGBColor(0x6C, 0x34, 0x83), n=6)
-    _group_table(Inches(4.7), "FIB", 'fib', "Not FIB", RGBColor(0x78, 0x42, 0x12))
+    y1 = _group_table(Inches(1.0), "FORM FAMILY", 'form_family', "(Blank)", RGBColor(0x6C, 0x34, 0x83), n=5)
+    y2 = _group_table(y1 + Inches(0.12), "FIB", 'fib', "Not FIB", RGBColor(0x78, 0x42, 0x12))
+    _group_table(y2 + Inches(0.12), "OPEN / CLOSED", 'open_close', "(Blank)", RGBColor(0x0E, 0x70, 0x60), n=3)
 
     # SLIDE 10 — Stats (Passing / Rushing / Receiving)
     s = _p_slide(prs, P_WHITE)
