@@ -7,6 +7,7 @@ from collections import Counter
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter as gcl
+from openpyxl.drawing.image import Image as XLImage
 from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
@@ -881,6 +882,18 @@ def _logo_stream():
     used for the favicon, header, background watermark, and PPTX title slide."""
     return io.BytesIO(base64.b64decode(LOGO_PNG_B64))
 
+def _faded_logo_stream(alpha_pct=8):
+    """A faint, low-opacity copy of the logo for use as an Excel watermark —
+    scales down the alpha channel so it sits behind data without obscuring it."""
+    img = PILImage.open(_logo_stream()).convert("RGBA")
+    r, g, b, a = img.split()
+    a = a.point(lambda px: int(px * alpha_pct / 100))
+    faded = PILImage.merge("RGBA", (r, g, b, a))
+    out = io.BytesIO()
+    faded.save(out, format="PNG")
+    out.seek(0)
+    return out
+
 LOGO_DATA_URI = f"data:image/png;base64,{LOGO_PNG_B64}"
 
 # ── FLEXIBLE COLUMN MAPPING ────────────────────────────────────
@@ -1253,11 +1266,17 @@ P_LGRAY = RGBColor(0xF2, 0xF2, 0xF2); P_DGRAY = RGBColor(0x55, 0x55, 0x55)
 P_BLACK = RGBColor(0x11, 0x11, 0x11)
 PW, PH = Inches(13.333), Inches(7.5)
 
-def _p_slide(prs, bg=P_WHITE):
+def _p_slide(prs, bg=P_WHITE, corner_logo=True):
     s = prs.slides.add_slide(prs.slide_layouts[6])
     r = s.shapes.add_shape(1, 0, 0, PW, PH)
     r.fill.solid(); r.fill.fore_color.rgb = bg; r.line.fill.background(); r.shadow.inherit = False
     sp = r._element; sp.getparent().remove(sp); s.shapes._spTree.insert(2, sp)
+    if corner_logo:
+        mark_h = Inches(0.42)
+        lw, lh = PILImage.open(_logo_stream()).size
+        mark_w = Inches(lw / lh * (mark_h / 914400))
+        s.shapes.add_picture(_logo_stream(), PW - mark_w - Inches(0.25), PH - mark_h - Inches(0.2),
+                              width=mark_w, height=mark_h)
     return s
 
 def _p_text(slide, x, y, w, h, text, size=14, color=P_BLACK, bold=False, align=PP_ALIGN.LEFT,
@@ -1315,7 +1334,7 @@ def build_pptx(plays, opp, week, date, primary_hex="#16213E", accent_hex="#C0392
     runs = [p for p in plays if p['rp'] == 'Run']; passes = [p for p in plays if p['rp'] == 'Pass']
 
     # SLIDE 1 — Title
-    s = _p_slide(prs, PRIMARY)
+    s = _p_slide(prs, PRIMARY, corner_logo=False)
     _p_text(s, Inches(0.8), Inches(2.3), Inches(11.7), Inches(1.2),
             "OPPONENT OFFENSE — SCOUTING REPORT", 40, ON_PRIMARY, bold=True, align=PP_ALIGN.CENTER, font="Cambria")
     _p_text(s, Inches(0.8), Inches(3.5), Inches(11.7), Inches(0.9),
@@ -1741,6 +1760,9 @@ def build_excel(plays, opp, week, date):
             sc(ws_log, r, ci, vals.get(col, ''), sz=9, bg=zbg, fc="FF000000",
                h="left" if col in ("OFF FORM", "CONCEPT", "RESULT", "BACKFIELD") else "center")
     ws_log.freeze_panes = "A3"
+    _wm = XLImage(_faded_logo_stream(6))
+    _wm.width, _wm.height = 480, 458
+    ws_log.add_image(_wm, "E6")
 
     # ── Tab 2: Field Zone Tendencies ─────────────────────────
     ws2 = wb2.create_sheet("2. Field Zone Tendencies")
@@ -2133,7 +2155,10 @@ def build_excel(plays, opp, week, date):
     ws12.page_setup.fitToPage = True; ws12.page_setup.fitToWidth = 1; ws12.page_setup.fitToHeight = 1
     widths(ws12, [16, 10, 10, 18, 20, 20, 3, 10, 30, 3, 3])
     heading = f"GAME DAY CALL SHEET   \u00b7   {opp or 'Opponent'}" + (f"   \u00b7   WK {week}" if week else "")
-    banner(ws12, 1, heading, 11, bg=CB, sz=14, ht=30)
+    banner(ws12, 1, heading, 11, bg=CB, sz=14, ht=34)
+    _gd_logo = XLImage(_logo_stream())
+    _gd_logo.width, _gd_logo.height = 34, 32
+    ws12.add_image(_gd_logo, "A1")
 
     # left block: down & distance
     r = 3
@@ -2458,6 +2483,37 @@ def build_excel(plays, opp, week, date):
 
     ws15.freeze_panes = "A2"
 
+    # ── Cover Tab (inserted first) ─────────────────────────────
+    ws_cov = wb2.create_sheet("0. Cover", 0)
+    ws_cov.sheet_properties.tabColor = "C0392B"
+    ws_cov.sheet_view.showGridLines = False
+    ws_cov.page_setup.orientation = "landscape"
+    ws_cov.page_setup.fitToPage = True; ws_cov.page_setup.fitToWidth = 1; ws_cov.page_setup.fitToHeight = 1
+    widths(ws_cov, [6] + [12] * 12)
+    for r in range(1, 26):
+        ws_cov.row_dimensions[r].height = 22
+    banner(ws_cov, 1, "DUNCAN DEMONS  \u00b7  DEFENSIVEIQ", 13, bg=CB, sz=16, ht=36)
+    _cov_logo = XLImage(_logo_stream())
+    _cov_logo.width, _cov_logo.height = 220, 210
+    ws_cov.add_image(_cov_logo, "F4")
+    ws_cov.merge_cells("B15:M15")
+    c = ws_cov.cell(row=15, column=2, value="OPPONENT SCOUTING REPORT")
+    c.font = Font(name=FN, bold=True, size=22, color="FF16213E")
+    c.alignment = Alignment(horizontal="center", vertical="center")
+    ws_cov.merge_cells("B17:M17")
+    c = ws_cov.cell(row=17, column=2, value=(opp or "Opponent").upper())
+    c.font = Font(name=FN, bold=True, size=28, color="FFC0392B")
+    c.alignment = Alignment(horizontal="center", vertical="center")
+    meta_bits = [x for x in [f"Week {week}" if week else "", date or "", f"{len(plays)} plays analyzed"] if x]
+    ws_cov.merge_cells("B19:M19")
+    c = ws_cov.cell(row=19, column=2, value="   \u00b7   ".join(meta_bits))
+    c.font = Font(name=FN, size=13, color="FF555555")
+    c.alignment = Alignment(horizontal="center", vertical="center")
+    ws_cov.merge_cells("B23:M23")
+    c = ws_cov.cell(row=23, column=2, value="Auto-generated from film \u2014 see the tabs below for the full breakdown.")
+    c.font = Font(name=FN, size=10, italic=True, color="FF999999")
+    c.alignment = Alignment(horizontal="center", vertical="center")
+
     buf = io.BytesIO(); wb2.save(buf); buf.seek(0)
     return buf.getvalue()
 
@@ -2540,9 +2596,9 @@ def build_html(plays, opp, week, date):
     return f'''<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>DefensiveIQ — {opp}</title>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<style>:root{{--field:#0a1628;--chalk:#f0ede8;--red:#c0392b;--gold:#d4a017;--blue:#1a5276;--mid:#1e2d3d;--line:rgba(240,237,232,0.1);}}*{{box-sizing:border-box;margin:0;padding:0;}}body{{background:var(--field);color:var(--chalk);font-family:Inter,sans-serif;font-size:17px;line-height:1.5;}}nav{{display:flex;align-items:center;justify-content:space-between;padding:14px 40px;border-bottom:1px solid var(--line);background:rgba(10,22,40,.97);}}.logo{{font-family:Oswald,sans-serif;font-weight:900;font-size:22px;}}.logo span{{color:#c0392b;}}.wrap{{max-width:1200px;margin:0 auto;padding:40px;}}.eyebrow{{font-family:Inter,sans-serif;font-size:19px;letter-spacing:.2em;color:var(--gold);text-transform:uppercase;margin-bottom:10px;}}.rpt-hdr{{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:32px;padding-bottom:18px;border-bottom:1px solid var(--line);}}.rpt-title{{font-family:Oswald,sans-serif;font-weight:900;font-size:42px;text-transform:uppercase;}}.rpt-meta{{font-family:Inter,sans-serif;font-size:19px;color:var(--gold);text-align:right;}}.sum-grid{{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:36px;}}.sum-card{{background:var(--mid);border:1px solid var(--line);padding:16px;}}.sum-lbl{{font-size:13px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:rgba(240,237,232,.65);margin-bottom:5px;}}.sum-val{{font-family:Oswald,sans-serif;font-weight:800;font-size:37px;line-height:1;}}.stitle{{font-family:Oswald,sans-serif;font-weight:800;font-size:21px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:16px;margin-top:36px;padding-bottom:8px;border-bottom:1px solid var(--line);}}.zone-grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}}.zone-card{{background:var(--mid);border:1px solid var(--line);overflow:hidden;}}.zone-hdr{{padding:10px 14px;display:flex;justify-content:space-between;align-items:center;}}.zone-badge{{font-family:Oswald,sans-serif;font-weight:900;font-size:19px;}}.zone-sub{{font-size:13px;color:rgba(240,237,232,.65);}}.zone-plays{{font-family:Inter,sans-serif;font-size:13px;color:var(--gold);}}.zone-body{{padding:11px 14px;}}.bar-row{{margin-bottom:8px;}}.bar-labels{{display:flex;justify-content:space-between;font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px;}}.bar-bg{{background:rgba(240,237,232,.07);height:5px;position:relative;}}.bar-fill{{height:5px;position:absolute;left:0;top:0;}}.zone-tags{{margin-top:8px;border-top:1px solid var(--line);padding-top:8px;}}.tag-lbl{{font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(240,237,232,.82);margin-bottom:3px;}}.ctag{{display:inline-block;background:rgba(240,237,232,.05);border:1px solid rgba(240,237,232,.1);font-family:Inter,sans-serif;font-size:12px;padding:2px 4px;margin:1px 1px 1px 0;color:rgba(240,237,232,.82);}}.ctag.f{{border-color:rgba(192,57,43,.4);color:#e8a095;}}.ctag.c{{border-color:rgba(93,173,226,.35);color:#93d4f0;}}.ctag.b{{border-color:rgba(212,160,23,.4);color:#d4a017;}}.hash-grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}}.hash-card{{background:var(--mid);border:1px solid var(--line);padding:18px;text-align:center;}}.hc-title{{font-family:Oswald,sans-serif;font-weight:800;font-size:15px;letter-spacing:.14em;text-transform:uppercase;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--line);}}.hbig{{font-family:Oswald,sans-serif;font-weight:900;font-size:50px;line-height:1;margin-bottom:2px;}}.hsub{{font-size:13px;color:rgba(240,237,232,.62);margin-bottom:10px;}}.hrp{{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;}}.hrp-item{{background:rgba(240,237,232,.04);padding:7px;}}.hrp-lbl{{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:rgba(240,237,232,.62);}}.hrp-val{{font-family:Oswald,sans-serif;font-weight:700;font-size:21px;}}.htc{{font-family:Inter,sans-serif;font-size:13px;color:rgba(240,237,232,.62);}}.sit-table{{width:100%;border-collapse:collapse;font-size:15px;}}.sit-table th{{background:var(--field);padding:7px 10px;font-family:Oswald,sans-serif;font-weight:700;font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:rgba(240,237,232,.7);border:1px solid var(--line);text-align:center;}}.sit-table th:first-child{{text-align:left;}}.sit-table td{{border:1px solid var(--line);padding:8px 12px;}}.sit-table tr:nth-child(odd) td{{background:rgba(240,237,232,.02);}}.sit-table tr:nth-child(even) td{{background:var(--mid);}}.sit-lbl{{font-family:Oswald,sans-serif;font-weight:700;font-size:15px;white-space:nowrap;}}.con-grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;}}.alert-box{{background:var(--mid);border:1px solid var(--line);border-left:4px solid var(--red);padding:16px 20px;}}</style>
+<style>:root{{--field:#0a1628;--chalk:#f0ede8;--red:#c0392b;--gold:#d4a017;--blue:#1a5276;--mid:#1e2d3d;--line:rgba(240,237,232,0.1);}}*{{box-sizing:border-box;margin:0;padding:0;}}body{{background:var(--field);background-image:linear-gradient(rgba(10,22,40,.94),rgba(10,22,40,.94)),url('{LOGO_DATA_URI}');background-repeat:no-repeat;background-position:center 8%;background-size:cover,32%;background-attachment:fixed;color:var(--chalk);font-family:Inter,sans-serif;font-size:17px;line-height:1.5;}}nav{{display:flex;align-items:center;justify-content:space-between;padding:14px 40px;border-bottom:1px solid var(--line);background:rgba(10,22,40,.97);}}.logo{{font-family:Oswald,sans-serif;font-weight:900;font-size:22px;}}.logo span{{color:#c0392b;}}.wrap{{max-width:1200px;margin:0 auto;padding:40px;}}.eyebrow{{font-family:Inter,sans-serif;font-size:19px;letter-spacing:.2em;color:var(--gold);text-transform:uppercase;margin-bottom:10px;}}.rpt-hdr{{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:32px;padding-bottom:18px;border-bottom:1px solid var(--line);}}.rpt-title{{font-family:Oswald,sans-serif;font-weight:900;font-size:42px;text-transform:uppercase;}}.rpt-meta{{font-family:Inter,sans-serif;font-size:19px;color:var(--gold);text-align:right;}}.sum-grid{{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:36px;}}.sum-card{{background:var(--mid);border:1px solid var(--line);padding:16px;}}.sum-lbl{{font-size:13px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:rgba(240,237,232,.65);margin-bottom:5px;}}.sum-val{{font-family:Oswald,sans-serif;font-weight:800;font-size:37px;line-height:1;}}.stitle{{font-family:Oswald,sans-serif;font-weight:800;font-size:21px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:16px;margin-top:36px;padding-bottom:8px;border-bottom:1px solid var(--line);}}.zone-grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}}.zone-card{{background:var(--mid);border:1px solid var(--line);overflow:hidden;}}.zone-hdr{{padding:10px 14px;display:flex;justify-content:space-between;align-items:center;}}.zone-badge{{font-family:Oswald,sans-serif;font-weight:900;font-size:19px;}}.zone-sub{{font-size:13px;color:rgba(240,237,232,.65);}}.zone-plays{{font-family:Inter,sans-serif;font-size:13px;color:var(--gold);}}.zone-body{{padding:11px 14px;}}.bar-row{{margin-bottom:8px;}}.bar-labels{{display:flex;justify-content:space-between;font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px;}}.bar-bg{{background:rgba(240,237,232,.07);height:5px;position:relative;}}.bar-fill{{height:5px;position:absolute;left:0;top:0;}}.zone-tags{{margin-top:8px;border-top:1px solid var(--line);padding-top:8px;}}.tag-lbl{{font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(240,237,232,.82);margin-bottom:3px;}}.ctag{{display:inline-block;background:rgba(240,237,232,.05);border:1px solid rgba(240,237,232,.1);font-family:Inter,sans-serif;font-size:12px;padding:2px 4px;margin:1px 1px 1px 0;color:rgba(240,237,232,.82);}}.ctag.f{{border-color:rgba(192,57,43,.4);color:#e8a095;}}.ctag.c{{border-color:rgba(93,173,226,.35);color:#93d4f0;}}.ctag.b{{border-color:rgba(212,160,23,.4);color:#d4a017;}}.hash-grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}}.hash-card{{background:var(--mid);border:1px solid var(--line);padding:18px;text-align:center;}}.hc-title{{font-family:Oswald,sans-serif;font-weight:800;font-size:15px;letter-spacing:.14em;text-transform:uppercase;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--line);}}.hbig{{font-family:Oswald,sans-serif;font-weight:900;font-size:50px;line-height:1;margin-bottom:2px;}}.hsub{{font-size:13px;color:rgba(240,237,232,.62);margin-bottom:10px;}}.hrp{{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;}}.hrp-item{{background:rgba(240,237,232,.04);padding:7px;}}.hrp-lbl{{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:rgba(240,237,232,.62);}}.hrp-val{{font-family:Oswald,sans-serif;font-weight:700;font-size:21px;}}.htc{{font-family:Inter,sans-serif;font-size:13px;color:rgba(240,237,232,.62);}}.sit-table{{width:100%;border-collapse:collapse;font-size:15px;}}.sit-table th{{background:var(--field);padding:7px 10px;font-family:Oswald,sans-serif;font-weight:700;font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:rgba(240,237,232,.7);border:1px solid var(--line);text-align:center;}}.sit-table th:first-child{{text-align:left;}}.sit-table td{{border:1px solid var(--line);padding:8px 12px;}}.sit-table tr:nth-child(odd) td{{background:rgba(240,237,232,.02);}}.sit-table tr:nth-child(even) td{{background:var(--mid);}}.sit-lbl{{font-family:Oswald,sans-serif;font-weight:700;font-size:15px;white-space:nowrap;}}.con-grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;}}.alert-box{{background:var(--mid);border:1px solid var(--line);border-left:4px solid var(--red);padding:16px 20px;}}</style>
 </head><body>
-<nav><div class="logo">DEFENSIVE<span>IQ</span></div><div style="font-family:Share Tech Mono,monospace;font-size:10px;color:rgba(240,237,232,.4)">OPPONENT OFFENSIVE TENDENCY REPORT</div></nav>
+<nav><div style="display:flex;align-items:center;gap:10px"><img src="{LOGO_DATA_URI}" style="height:32px;width:auto"/><div class="logo">DEFENSIVE<span>IQ</span></div></div><div style="font-family:Share Tech Mono,monospace;font-size:10px;color:rgba(240,237,232,.4)">OPPONENT OFFENSIVE TENDENCY REPORT</div></nav>
 <div class="wrap">
 <div class="rpt-hdr"><div><div class="eyebrow">// Defensive Coordinator — Opponent Scouting Report</div><div class="rpt-title">{opp} — Offensive Analysis</div></div><div class="rpt-meta">WEEK {week}{("<br>"+date) if date else ""}<br>{total} PLAYS ANALYZED</div></div>
 <div class="sum-grid">
