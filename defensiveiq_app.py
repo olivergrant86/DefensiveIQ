@@ -46,6 +46,7 @@ COLUMN_ALIASES = {
     "RUSHER":      ["OPP RUSHER", "RUSHER", "BALL CARRIER", "BALLCARRIER", "RB"],
     "RECEIVER":    ["OPP RECEIVER", "RECEIVER", "TARGET", "WR"],
     "BACK DEPTH":  ["BACK DEPTH", "BACKDEPTH", "DEPTH"],
+    "OPEN/CLOSE":  ["OPEN/CLOSE", "OPEN/CLOSED", "OPEN CLOSE", "OPENCLOSE"],
 }
 
 def _normalize(s):
@@ -205,6 +206,7 @@ def load_plays(df):
             'rusher':   row.get('RUSHER', ''),
             'receiver': row.get('RECEIVER', ''),
             'back_depth': str(row.get('BACK DEPTH', '')).strip(),
+            'open_close': str(row.get('OPEN/CLOSE', '')).strip(),
         })
     return plays
 
@@ -1404,8 +1406,100 @@ def build_excel(plays, opp, week, date):
     group_tab(ws14b, 'back_depth', "BACK DEPTH TENDENCIES  \u2014  Run/Pass Split, Favorite Plays & Formations",
               "FF0E7060", "0E7060", empty_label="(Blank)")
 
-    # ── Tab 15: Stats (Passing / Rushing / Receiving) ──────────
-    ws15 = wb2.create_sheet("16. Stats")
+    # ── Tab 16: Open/Closed (with cross-break by Form Family) ─
+    ws14c = wb2.create_sheet("16. Open-Closed")
+
+    def build_open_closed_tab(ws):
+        ws.sheet_properties.tabColor = "4A235A"
+        ws.sheet_view.showGridLines = False
+        NC = 13
+        widths(ws, [20, 8, 8, 8, 18, 18, 18, 18, 18, 18, 16, 16, 16])
+        banner(ws, 1, "OPEN / CLOSED TENDENCIES  \u2014  Run/Pass Split, Favorite Plays & Formations",
+               NC, bg="FF4A235A", sz=13, ht=28)
+        for c, txt, bg in [(1, "GROUP", CB), (2, "Snaps", CB), (3, "Run%", CB), (4, "Pass%", CB),
+                           (5, "#1 Run Play", CR), (6, "#2 Run Play", CR), (7, "#3 Run Play", CR),
+                           (8, "#1 Pass Play", CBl), (9, "#2 Pass Play", CBl), (10, "#3 Pass Play", CBl),
+                           (11, "#1 Formation", CPu), (12, "#2 Formation", CPu), (13, "#3 Formation", CPu)]:
+            hdr(ws, 2, c, txt, bg=bg, sz=8, wrap=True)
+        groups = {}
+        for p in plays:
+            v = str(p.get('open_close', '')).strip()
+            if v in ('', 'nan', 'None'): v = "(Blank)"
+            groups.setdefault(v, []).append(p)
+        ranked = sorted(groups.items(), key=lambda kv: -len(kv[1]))
+        row = 3
+        for ri, (v, g) in enumerate(ranked):
+            bg = CL if ri % 2 == 0 else CW
+            gr = [p for p in g if p['rp'] == 'Run']; gp = [p for p in g if p['rp'] == 'Pass']
+            sc(ws, row, 1, v, bold=True, sz=9, fc=CW, bg="FF4A235A", h="left")
+            sc(ws, row, 2, len(g), bold=True, sz=10, fc="FF000000", bg=bg, fmt="0")
+            sc(ws, row, 3, round(len(gr) / len(g), 2) if g else "", bold=True, sz=10, fc="FF8B0000", bg=CRB, fmt="0%")
+            sc(ws, row, 4, round(len(gp) / len(g), 2) if g else "", bold=True, sz=10, fc="FF00008B", bg=CPB, fmt="0%")
+            t3rc = top3_str(gr, 'concept', 3); t3pc = top3_str(gp, 'concept', 3); t3f = top3_str(g, 'form', 3)
+            for i, cn in enumerate([5, 6, 7]): sc(ws, row, cn, t3rc[i], sz=9, bg=CRB, wrap=True)
+            for i, cn in enumerate([8, 9, 10]): sc(ws, row, cn, t3pc[i], sz=9, bg=CPB, wrap=True)
+            for i, cn in enumerate([11, 12, 13]): sc(ws, row, cn, t3f[i], sz=9, bg="FFEDE7F6", wrap=True)
+            row += 1
+        if not ranked:
+            ws.merge_cells(f"A3:{gcl(NC)}3")
+            c = ws.cell(row=3, column=1, value="Not enough tagged data for this section.")
+            c.font = Font(name=FN, sz=10, italic=True, color=CDG); c.alignment = Alignment(horizontal="center")
+            row = 4
+        ws.freeze_panes = "B3"
+
+        # ── Cross-break: Open/Closed within each Formation Family ──
+        row += 1
+        banner(ws, row, "OPEN / CLOSED BY FORMATION FAMILY", NC, bg="FF6C3483", sz=12, ht=26)
+        row += 1
+        for c, txt, bg in [(1, "FAMILY / GROUP", CB), (2, "Snaps", CB), (3, "Run%", CB), (4, "Pass%", CB),
+                           (5, "#1 Run Play", CR), (6, "#2 Run Play", CR), (7, "#3 Run Play", CR),
+                           (8, "#1 Pass Play", CBl), (9, "#2 Pass Play", CBl), (10, "#3 Pass Play", CBl),
+                           (11, "#1 Formation", CPu), (12, "#2 Formation", CPu), (13, "#3 Formation", CPu)]:
+            hdr(ws, row, c, txt, bg=bg, sz=8, wrap=True)
+        row += 1
+        fam_groups = {}
+        for p in plays:
+            fam = str(p.get('form_family', '')).strip()
+            if fam in ('', 'nan', 'None'): continue
+            fam_groups.setdefault(fam, []).append(p)
+        fam_ranked = sorted(fam_groups.items(), key=lambda kv: -len(kv[1]))
+        combo_i = 0
+        for fam, fam_plays in fam_ranked:
+            ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=NC)
+            c = ws.cell(row=row, column=1, value=f"  {fam}  ({len(fam_plays)} snaps)")
+            c.font = Font(name=FN, bold=True, size=10, color=CW)
+            c.fill = fil("FF6C3483")
+            c.alignment = Alignment(horizontal="left", vertical="center")
+            ws.row_dimensions[row].height = 18
+            row += 1
+            oc_groups = {}
+            for p in fam_plays:
+                v = str(p.get('open_close', '')).strip()
+                if v in ('', 'nan', 'None'): v = "(Blank)"
+                oc_groups.setdefault(v, []).append(p)
+            oc_ranked = sorted(oc_groups.items(), key=lambda kv: -len(kv[1]))
+            for v, g in oc_ranked:
+                bg = CL if combo_i % 2 == 0 else CW
+                combo_i += 1
+                gr = [p for p in g if p['rp'] == 'Run']; gp = [p for p in g if p['rp'] == 'Pass']
+                sc(ws, row, 1, f"    {v}", bold=True, sz=9, fc="FF4A235A", bg=bg, h="left")
+                sc(ws, row, 2, len(g), bold=True, sz=9, fc="FF000000", bg=bg, fmt="0")
+                sc(ws, row, 3, round(len(gr) / len(g), 2) if g else "", sz=9, fc="FF8B0000", bg=CRB, fmt="0%")
+                sc(ws, row, 4, round(len(gp) / len(g), 2) if g else "", sz=9, fc="FF00008B", bg=CPB, fmt="0%")
+                t3rc = top3_str(gr, 'concept', 3); t3pc = top3_str(gp, 'concept', 3); t3f = top3_str(g, 'form', 3)
+                for i, cn in enumerate([5, 6, 7]): sc(ws, row, cn, t3rc[i], sz=8, bg=CRB, wrap=True)
+                for i, cn in enumerate([8, 9, 10]): sc(ws, row, cn, t3pc[i], sz=8, bg=CPB, wrap=True)
+                for i, cn in enumerate([11, 12, 13]): sc(ws, row, cn, t3f[i], sz=8, bg="FFEDE7F6", wrap=True)
+                row += 1
+        if not fam_ranked:
+            ws.merge_cells(f"A{row}:{gcl(NC)}{row}")
+            c = ws.cell(row=row, column=1, value="Not enough Form Family data tagged.")
+            c.font = Font(name=FN, sz=10, italic=True, color=CDG); c.alignment = Alignment(horizontal="center")
+
+    build_open_closed_tab(ws14c)
+
+    # ── Tab 17: Stats (Passing / Rushing / Receiving) ──────────
+    ws15 = wb2.create_sheet("17. Stats")
     ws15.sheet_properties.tabColor = "16213E"; ws15.sheet_view.showGridLines = False
     NC15 = 11
     widths(ws15, [10, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8])
