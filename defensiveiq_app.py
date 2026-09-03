@@ -1623,16 +1623,16 @@ st.set_page_config(
 st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=Barlow:wght@400;500;600&family=Share+Tech+Mono&display=swap');
-html,body,[class*="css"]{{font-family:'Barlow',sans-serif;background-color:#0a1628;color:#f0ede8;}}
-.stApp{{background-color:#0a1628;background-image:linear-gradient(rgba(10,22,40,.94),rgba(10,22,40,.94)),url('{LOGO_DATA_URI}');background-repeat:no-repeat;background-position:center 12%;background-size:cover,42%;background-attachment:fixed;}}
+html,body,[class*="css"]{{font-family:'Barlow',sans-serif;background-color:#0D0D0D;color:#f0ede8;}}
+.stApp{{background-color:#0D0D0D;background-image:linear-gradient(rgba(13,13,13,.94),rgba(13,13,13,.94)),url('{LOGO_DATA_URI}');background-repeat:no-repeat;background-position:center 12%;background-size:cover,42%;background-attachment:fixed;}}
 .main-title{{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:64px;line-height:.95;text-transform:uppercase;color:#f0ede8;margin-bottom:8px;}}
-.stButton>button{{background:#c0392b!important;color:#f0ede8!important;border:none!important;font-family:'Barlow Condensed',sans-serif!important;font-weight:700!important;font-size:16px!important;letter-spacing:.1em!important;text-transform:uppercase!important;padding:12px 32px!important;border-radius:0!important;width:100%!important;}}
-.stButton>button:hover{{background:#a93226!important;}}
+.stButton>button{{background:#D2011A!important;color:#f0ede8!important;border:none!important;font-family:'Barlow Condensed',sans-serif!important;font-weight:700!important;font-size:16px!important;letter-spacing:.1em!important;text-transform:uppercase!important;padding:12px 32px!important;border-radius:0!important;width:100%!important;}}
+.stButton>button:hover{{background:#A80115!important;}}
 .stDownloadButton>button{{background:#154360!important;color:#f0ede8!important;border:none!important;font-family:'Barlow Condensed',sans-serif!important;font-weight:700!important;font-size:14px!important;letter-spacing:.08em!important;text-transform:uppercase!important;border-radius:0!important;width:100%!important;}}
-[data-testid="stFileUploaderDropzone"]{{border:2px dashed rgba(192,57,43,.55)!important;background:rgba(192,57,43,.06)!important;border-radius:2px!important;transition:border-color .2s ease,background .2s ease;}}
-[data-testid="stFileUploaderDropzone"]:hover{{border-color:#c0392b!important;background:rgba(192,57,43,.12)!important;}}
-[data-testid="stFileUploaderDropzone"] button{{border-color:#c0392b!important;color:#c0392b!important;}}
-[data-testid="stFileUploaderDropzone"] button:hover{{background:rgba(192,57,43,.15)!important;}}
+[data-testid="stFileUploaderDropzone"]{{border:2px dashed rgba(210,1,26,.55)!important;background:rgba(210,1,26,.06)!important;border-radius:2px!important;transition:border-color .2s ease,background .2s ease;}}
+[data-testid="stFileUploaderDropzone"]:hover{{border-color:#D2011A!important;background:rgba(210,1,26,.12)!important;}}
+[data-testid="stFileUploaderDropzone"] button{{border-color:#D2011A!important;color:#D2011A!important;}}
+[data-testid="stFileUploaderDropzone"] button:hover{{background:rgba(210,1,26,.15)!important;}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -1989,7 +1989,7 @@ def _p_table(slide, x, y, w, rows, col_widths, font_size=11, row_h=Inches(0.34))
             run.font.name = 'Calibri'
     return gt
 
-def build_pptx(plays, opp, week, date, primary_hex="#16213E", accent_hex="#C0392B"):
+def build_pptx(plays, opp, week, date, primary_hex="#0D0D0D", accent_hex="#D2011A"):
     def _hex2rgb(h):
         h = h.lstrip('#'); return RGBColor(int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
     def _lum(h):
@@ -2356,8 +2356,8 @@ def build_pptx(plays, opp, week, date, primary_hex="#16213E", accent_hex="#C0392
 
 # ── Excel Builder ─────────────────────────────────────────────
 def build_excel(plays, opp, week, date):
-    FN = "Arial"; CW = "FFFFFFFF"; CL = "FFF5F5F5"; CB = "FF16213E"
-    CBl = "FF1A5276"; CTe = "FF0E7060"; CPu = "FF4A235A"; CR = "FFC0392B"
+    FN = "Arial"; CW = "FFFFFFFF"; CL = "FFF5F5F5"; CB = "FF0D0D0D"
+    CBl = "FF1A5276"; CTe = "FF0E7060"; CPu = "FF4A235A"; CR = "FFD2011A"
     CRB = "FFFDE8E8"; CPB = "FFE8F0FE"
     CDG = "FF555555"; CGr = "FF1E8449"; CYB = "FFFFFBE6"
     ZONE_BG  = {"BZ": "FFFDE8E8", "OF": "FFE8F0FE", "MF": "FFE8F8E8",
@@ -2406,7 +2406,7 @@ def build_excel(plays, opp, week, date):
 
     # ── Tab 1: Film Log ──────────────────────────────────────
     ws_log = wb2.active; ws_log.title = "1. Film Log"
-    ws_log.sheet_properties.tabColor = "C0392B"
+    ws_log.sheet_properties.tabColor = "D2011A"
     ws_log.sheet_view.showGridLines = False
     log_cols = [('QTR', 6), ('DN', 6), ('DIST', 6), ('HASH', 6), ('YARD LN', 9), ('ZONE', 10),
                 ('OFF FORM', 20), ('OFF STR', 8), ('BACKFIELD', 12), ('PLAY DIR', 9),
@@ -2477,7 +2477,7 @@ def build_excel(plays, opp, week, date):
                 else: v = ""
                 cbg = CYB if mlbl == "\u25b6 Call Idea" else bg
                 fmt = "0%" if "%" in mlbl else ("0" if v != "" else "General")
-                fc = "FFC0392B" if mlbl == "Run %" else ("FF00008B" if mlbl == "Pass %" else "FF000000")
+                fc = "FFD2011A" if mlbl == "Run %" else ("FF00008B" if mlbl == "Pass %" else "FF000000")
                 sc(ws2, row, ci, v, sz=9, fc=fc, bg=cbg, fmt=fmt)
             row += 1
         row += 1
@@ -2485,7 +2485,7 @@ def build_excel(plays, opp, week, date):
 
     # ── Tab 3: Run Tendencies (by zone) ──────────────────────
     ws3 = wb2.create_sheet("3. Run Tendencies")
-    ws3.sheet_properties.tabColor = "C0392B"; ws3.sheet_view.showGridLines = False
+    ws3.sheet_properties.tabColor = "D2011A"; ws3.sheet_view.showGridLines = False
     NC3 = 13
     widths(ws3, [8, 9, 8, 10, 18, 18, 18, 16, 16, 16, 8, 8, 8])
     banner(ws3, 1, "RUN TENDENCIES  —  Auto-calculated from film", NC3, bg=CR, sz=13, ht=28)
@@ -2644,7 +2644,7 @@ def build_excel(plays, opp, week, date):
                    bg="FFEDE7F6", fmt="0%" if dsr is not None else "General")
             rzg = [p for p in g if p['zone'] in ('RZ', 'GL')]
             rzsr = _sr(rzg)
-            sc(ws, r, 11, (round(rzsr / 100, 2) if rzsr is not None else "—"), sz=9, fc="FFC0392B",
+            sc(ws, r, 11, (round(rzsr / 100, 2) if rzsr is not None else "—"), sz=9, fc="FFD2011A",
                bg=CRB, fmt="0%" if rzsr is not None else "General")
             tf = top3(g, 'form', 1); th = top3(g, 'hash', 1)
             sc(ws, r, 12, tf[0]['v'] if tf else "—", sz=8, bg=bg, h="left", wrap=True)
@@ -2658,8 +2658,8 @@ def build_excel(plays, opp, week, date):
             name=FN, sz=8, italic=True, color=CDG)
         ws.freeze_panes = "B3"
 
-    ws7 = wb2.create_sheet("7. Run Concepts"); ws7.sheet_properties.tabColor = "C0392B"
-    concept_tab(ws7, "Run", "RUN CONCEPTS  \u2014  Explosive (10+) & Success Rate by Concept (All Calls)", "FFC0392B")
+    ws7 = wb2.create_sheet("7. Run Concepts"); ws7.sheet_properties.tabColor = "D2011A"
+    concept_tab(ws7, "Run", "RUN CONCEPTS  \u2014  Explosive (10+) & Success Rate by Concept (All Calls)", "FFD2011A")
 
     ws8 = wb2.create_sheet("8. Pass Concepts"); ws8.sheet_properties.tabColor = "1A5276"
     concept_tab(ws8, "Pass", "PASS CONCEPTS  \u2014  Explosive (15+) & Success Rate by Concept (All Calls)", "FF1A5276")
@@ -2747,8 +2747,8 @@ def build_excel(plays, opp, week, date):
         ("MUST-HAVE", dict(dn=4)),
     ]
     sit_colors = ["FF0E7060", "FF1A5276", "FF1A5276", "FF1A5276",
-                  "FFC0392B", "FFC0392B", "FFC0392B", "FF7B241C",
-                  "FFC0392B", "FF4A235A", "FF0E7060", "FF0E7060", "FF7D6608", "FF16213E"]
+                  "FFD2011A", "FFD2011A", "FFD2011A", "FF7B241C",
+                  "FFD2011A", "FF4A235A", "FF0E7060", "FF0E7060", "FF7D6608", "FF0D0D0D"]
     for ri, ((lbl, args), color) in enumerate(zip(sits10, sit_colors)):
         r = ri + 3; ws10.row_dimensions[r].height = 30
         sc(ws10, r, 1, lbl, bold=True, sz=9, fc=CW, bg=color, h="left")
@@ -2820,7 +2820,7 @@ def build_excel(plays, opp, week, date):
 
     # ── Tab 12: Game Day Call Sheet (printable one-pager) ─────
     ws12 = wb2.create_sheet("12. Game Day Call Sheet")
-    ws12.sheet_properties.tabColor = "16213E"; ws12.sheet_view.showGridLines = False
+    ws12.sheet_properties.tabColor = "0D0D0D"; ws12.sheet_view.showGridLines = False
     ws12.page_setup.orientation = "landscape"
     ws12.page_setup.fitToPage = True; ws12.page_setup.fitToWidth = 1; ws12.page_setup.fitToHeight = 1
     widths(ws12, [16, 10, 10, 18, 20, 20, 3, 10, 30, 3, 3])
@@ -3067,7 +3067,7 @@ def build_excel(plays, opp, week, date):
 
     # ── Tab 17: Stats (Passing / Rushing / Receiving) ──────────
     ws15 = wb2.create_sheet("17. Stats")
-    ws15.sheet_properties.tabColor = "16213E"; ws15.sheet_view.showGridLines = False
+    ws15.sheet_properties.tabColor = "0D0D0D"; ws15.sheet_view.showGridLines = False
     NC15 = 11
     widths(ws15, [10, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8])
 
@@ -3096,7 +3096,7 @@ def build_excel(plays, opp, week, date):
         sc(ws15, row, 8, _dash(td), sz=9, bg=bg, fmt="0" if td else "General")
         sc(ws15, row, 9, _dash(fum), sz=9, bg=bg, fmt="0" if fum else "General")
         sc(ws15, row, 10, _dash(intc), sz=9, bg=bg, fmt="0" if intc else "General")
-        sc(ws15, row, 11, round(rating, 1), bold=True, sz=9, fc="FFC0392B", bg=CRB, fmt="0.0")
+        sc(ws15, row, 11, round(rating, 1), bold=True, sz=9, fc="FFD2011A", bg=CRB, fmt="0.0")
         row += 1
     if not pass_ranked:
         ws15.merge_cells(start_row=row, start_column=1, end_row=row, end_column=NC15)
@@ -3155,7 +3155,7 @@ def build_excel(plays, opp, week, date):
 
     # ── Cover Tab (inserted first) ─────────────────────────────
     ws_cov = wb2.create_sheet("0. Cover", 0)
-    ws_cov.sheet_properties.tabColor = "C0392B"
+    ws_cov.sheet_properties.tabColor = "D2011A"
     ws_cov.sheet_view.showGridLines = False
     ws_cov.page_setup.orientation = "landscape"
     ws_cov.page_setup.fitToPage = True; ws_cov.page_setup.fitToWidth = 1; ws_cov.page_setup.fitToHeight = 1
@@ -3168,11 +3168,11 @@ def build_excel(plays, opp, week, date):
     ws_cov.add_image(_cov_logo, "F4")
     ws_cov.merge_cells("B15:M15")
     c = ws_cov.cell(row=15, column=2, value="OPPONENT SCOUTING REPORT")
-    c.font = Font(name=FN, bold=True, size=22, color="FF16213E")
+    c.font = Font(name=FN, bold=True, size=22, color="FF0D0D0D")
     c.alignment = Alignment(horizontal="center", vertical="center")
     ws_cov.merge_cells("B17:M17")
     c = ws_cov.cell(row=17, column=2, value=(opp or "Opponent").upper())
-    c.font = Font(name=FN, bold=True, size=28, color="FFC0392B")
+    c.font = Font(name=FN, bold=True, size=28, color="FFD2011A")
     c.alignment = Alignment(horizontal="center", vertical="center")
     meta_bits = [x for x in [f"Week {week}" if week else "", date or "", f"{len(plays)} plays analyzed"] if x]
     ws_cov.merge_cells("B19:M19")
@@ -3189,7 +3189,7 @@ def build_excel(plays, opp, week, date):
 
 # ── HTML Report ───────────────────────────────────────────────
 def build_html(plays, opp, week, date):
-    zc = {"BZ": "#c0392b", "OF": "#1a5276", "MF": "#0e7060", "FZ": "#7d6608", "RZ": "#c0392b", "GL": "#4a235a"}
+    zc = {"BZ": "#D2011A", "OF": "#1a5276", "MF": "#0e7060", "FZ": "#7d6608", "RZ": "#D2011A", "GL": "#4a235a"}
     total = len(plays); runs = [p for p in plays if p['rp'] == 'Run']; passes = [p for p in plays if p['rp'] == 'Pass']
 
     def tags(items, cls=''):
@@ -3210,7 +3210,7 @@ def build_html(plays, opp, week, date):
           <div class="zone-body">
             <div class="bar-row">
               <div class="bar-labels"><span style="color:#e8a095">RUN {rp}%</span><span style="color:#93d4f0">PASS {pp}%</span></div>
-              <div class="bar-bg"><div class="bar-fill" style="background:#c0392b;width:{rp}%"></div></div>
+              <div class="bar-bg"><div class="bar-fill" style="background:#D2011A;width:{rp}%"></div></div>
             </div>
             <div class="zone-tags">
               <div class="tag-lbl">Top Run Concepts</div>{tags(top3(zr2,"concept"),"f")}
@@ -3233,7 +3233,7 @@ def build_html(plays, opp, week, date):
           <div class="hbig" style="color:{color}">{len(hp)}</div>
           <div class="hsub">total plays</div>
           <div class="hrp">
-            <div class="hrp-item"><div class="hrp-lbl">Run %</div><div class="hrp-val" style="color:#c0392b">{pct(len(hr2),len(hp))}%</div></div>
+            <div class="hrp-item"><div class="hrp-lbl">Run %</div><div class="hrp-val" style="color:#D2011A">{pct(len(hr2),len(hp))}%</div></div>
             <div class="hrp-item"><div class="hrp-lbl">Pass %</div><div class="hrp-val" style="color:#5dade2">{pct(len(hpass),len(hp))}%</div></div>
           </div>
           <div class="htc">Top Concept: <span style="color:#d4a017">{tf[0]["v"]+" ("+str(tf[0]["n"])+")" if tf else "—"}</span></div>
@@ -3246,7 +3246,7 @@ def build_html(plays, opp, week, date):
         tf = top3(sr2, 'concept', 1); tc = top3(spass, 'concept', 1)
         sit_rows += f'''<tr>
           <td class="sit-lbl">{lbl}</td>
-          <td style="text-align:center;font-family:Barlow Condensed,sans-serif;font-weight:800;font-size:20px;color:#c0392b">{pct(len(sr2),len(sp)) if sp else "—"}%</td>
+          <td style="text-align:center;font-family:Barlow Condensed,sans-serif;font-weight:800;font-size:20px;color:#D2011A">{pct(len(sr2),len(sp)) if sp else "—"}%</td>
           <td style="text-align:center;font-family:Barlow Condensed,sans-serif;font-weight:800;font-size:20px;color:#5dade2">{pct(len(spass),len(sp)) if sp else "—"}%</td>
           <td style="font-family:Share Tech Mono,monospace;font-size:9px;color:#d4a017">{tf[0]["v"]+" ("+str(tf[0]["n"])+")" if tf else "—"}</td>
           <td style="font-family:Share Tech Mono,monospace;font-size:9px;color:#d4a017">{tc[0]["v"]+" ("+str(tc[0]["n"])+")" if tc else "—"}</td>
@@ -3266,14 +3266,14 @@ def build_html(plays, opp, week, date):
     return f'''<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>DefensiveIQ — {opp}</title>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<style>:root{{--field:#0a1628;--chalk:#f0ede8;--red:#c0392b;--gold:#d4a017;--blue:#1a5276;--mid:#1e2d3d;--line:rgba(240,237,232,0.1);}}*{{box-sizing:border-box;margin:0;padding:0;}}body{{background:var(--field);background-image:linear-gradient(rgba(10,22,40,.94),rgba(10,22,40,.94)),url('{LOGO_DATA_URI}');background-repeat:no-repeat;background-position:center 8%;background-size:cover,32%;background-attachment:fixed;color:var(--chalk);font-family:Inter,sans-serif;font-size:17px;line-height:1.5;}}nav{{display:flex;align-items:center;justify-content:space-between;padding:14px 40px;border-bottom:1px solid var(--line);background:rgba(10,22,40,.97);}}.logo{{font-family:Oswald,sans-serif;font-weight:900;font-size:22px;}}.logo span{{color:#c0392b;}}.wrap{{max-width:1200px;margin:0 auto;padding:40px;}}.eyebrow{{font-family:Inter,sans-serif;font-size:19px;letter-spacing:.2em;color:var(--gold);text-transform:uppercase;margin-bottom:10px;}}.rpt-hdr{{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:32px;padding-bottom:18px;border-bottom:1px solid var(--line);}}.rpt-title{{font-family:Oswald,sans-serif;font-weight:900;font-size:42px;text-transform:uppercase;}}.rpt-meta{{font-family:Inter,sans-serif;font-size:19px;color:var(--gold);text-align:right;}}.sum-grid{{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:36px;}}.sum-card{{background:var(--mid);border:1px solid var(--line);padding:16px;}}.sum-lbl{{font-size:13px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:rgba(240,237,232,.65);margin-bottom:5px;}}.sum-val{{font-family:Oswald,sans-serif;font-weight:800;font-size:37px;line-height:1;}}.stitle{{font-family:Oswald,sans-serif;font-weight:800;font-size:21px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:16px;margin-top:36px;padding-bottom:8px;border-bottom:1px solid var(--line);}}.zone-grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}}.zone-card{{background:var(--mid);border:1px solid var(--line);overflow:hidden;}}.zone-hdr{{padding:10px 14px;display:flex;justify-content:space-between;align-items:center;}}.zone-badge{{font-family:Oswald,sans-serif;font-weight:900;font-size:19px;}}.zone-sub{{font-size:13px;color:rgba(240,237,232,.65);}}.zone-plays{{font-family:Inter,sans-serif;font-size:13px;color:var(--gold);}}.zone-body{{padding:11px 14px;}}.bar-row{{margin-bottom:8px;}}.bar-labels{{display:flex;justify-content:space-between;font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px;}}.bar-bg{{background:rgba(240,237,232,.07);height:5px;position:relative;}}.bar-fill{{height:5px;position:absolute;left:0;top:0;}}.zone-tags{{margin-top:8px;border-top:1px solid var(--line);padding-top:8px;}}.tag-lbl{{font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(240,237,232,.82);margin-bottom:3px;}}.ctag{{display:inline-block;background:rgba(240,237,232,.05);border:1px solid rgba(240,237,232,.1);font-family:Inter,sans-serif;font-size:12px;padding:2px 4px;margin:1px 1px 1px 0;color:rgba(240,237,232,.82);}}.ctag.f{{border-color:rgba(192,57,43,.4);color:#e8a095;}}.ctag.c{{border-color:rgba(93,173,226,.35);color:#93d4f0;}}.ctag.b{{border-color:rgba(212,160,23,.4);color:#d4a017;}}.hash-grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}}.hash-card{{background:var(--mid);border:1px solid var(--line);padding:18px;text-align:center;}}.hc-title{{font-family:Oswald,sans-serif;font-weight:800;font-size:15px;letter-spacing:.14em;text-transform:uppercase;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--line);}}.hbig{{font-family:Oswald,sans-serif;font-weight:900;font-size:50px;line-height:1;margin-bottom:2px;}}.hsub{{font-size:13px;color:rgba(240,237,232,.62);margin-bottom:10px;}}.hrp{{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;}}.hrp-item{{background:rgba(240,237,232,.04);padding:7px;}}.hrp-lbl{{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:rgba(240,237,232,.62);}}.hrp-val{{font-family:Oswald,sans-serif;font-weight:700;font-size:21px;}}.htc{{font-family:Inter,sans-serif;font-size:13px;color:rgba(240,237,232,.62);}}.sit-table{{width:100%;border-collapse:collapse;font-size:15px;}}.sit-table th{{background:var(--field);padding:7px 10px;font-family:Oswald,sans-serif;font-weight:700;font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:rgba(240,237,232,.7);border:1px solid var(--line);text-align:center;}}.sit-table th:first-child{{text-align:left;}}.sit-table td{{border:1px solid var(--line);padding:8px 12px;}}.sit-table tr:nth-child(odd) td{{background:rgba(240,237,232,.02);}}.sit-table tr:nth-child(even) td{{background:var(--mid);}}.sit-lbl{{font-family:Oswald,sans-serif;font-weight:700;font-size:15px;white-space:nowrap;}}.con-grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;}}.alert-box{{background:var(--mid);border:1px solid var(--line);border-left:4px solid var(--red);padding:16px 20px;}}</style>
+<style>:root{{--field:#0D0D0D;--chalk:#f0ede8;--red:#D2011A;--gold:#d4a017;--blue:#1a5276;--mid:#1e2d3d;--line:rgba(240,237,232,0.1);}}*{{box-sizing:border-box;margin:0;padding:0;}}body{{background:var(--field);background-image:linear-gradient(rgba(13,13,13,.94),rgba(13,13,13,.94)),url('{LOGO_DATA_URI}');background-repeat:no-repeat;background-position:center 8%;background-size:cover,32%;background-attachment:fixed;color:var(--chalk);font-family:Inter,sans-serif;font-size:17px;line-height:1.5;}}nav{{display:flex;align-items:center;justify-content:space-between;padding:14px 40px;border-bottom:1px solid var(--line);background:rgba(13,13,13,.97);}}.logo{{font-family:Oswald,sans-serif;font-weight:900;font-size:22px;}}.logo span{{color:#D2011A;}}.wrap{{max-width:1200px;margin:0 auto;padding:40px;}}.eyebrow{{font-family:Inter,sans-serif;font-size:19px;letter-spacing:.2em;color:var(--gold);text-transform:uppercase;margin-bottom:10px;}}.rpt-hdr{{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:32px;padding-bottom:18px;border-bottom:1px solid var(--line);}}.rpt-title{{font-family:Oswald,sans-serif;font-weight:900;font-size:42px;text-transform:uppercase;}}.rpt-meta{{font-family:Inter,sans-serif;font-size:19px;color:var(--gold);text-align:right;}}.sum-grid{{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:36px;}}.sum-card{{background:var(--mid);border:1px solid var(--line);padding:16px;}}.sum-lbl{{font-size:13px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:rgba(240,237,232,.65);margin-bottom:5px;}}.sum-val{{font-family:Oswald,sans-serif;font-weight:800;font-size:37px;line-height:1;}}.stitle{{font-family:Oswald,sans-serif;font-weight:800;font-size:21px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:16px;margin-top:36px;padding-bottom:8px;border-bottom:1px solid var(--line);}}.zone-grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}}.zone-card{{background:var(--mid);border:1px solid var(--line);overflow:hidden;}}.zone-hdr{{padding:10px 14px;display:flex;justify-content:space-between;align-items:center;}}.zone-badge{{font-family:Oswald,sans-serif;font-weight:900;font-size:19px;}}.zone-sub{{font-size:13px;color:rgba(240,237,232,.65);}}.zone-plays{{font-family:Inter,sans-serif;font-size:13px;color:var(--gold);}}.zone-body{{padding:11px 14px;}}.bar-row{{margin-bottom:8px;}}.bar-labels{{display:flex;justify-content:space-between;font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px;}}.bar-bg{{background:rgba(240,237,232,.07);height:5px;position:relative;}}.bar-fill{{height:5px;position:absolute;left:0;top:0;}}.zone-tags{{margin-top:8px;border-top:1px solid var(--line);padding-top:8px;}}.tag-lbl{{font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(240,237,232,.82);margin-bottom:3px;}}.ctag{{display:inline-block;background:rgba(240,237,232,.05);border:1px solid rgba(240,237,232,.1);font-family:Inter,sans-serif;font-size:12px;padding:2px 4px;margin:1px 1px 1px 0;color:rgba(240,237,232,.82);}}.ctag.f{{border-color:rgba(210,1,26,.4);color:#e8a095;}}.ctag.c{{border-color:rgba(93,173,226,.35);color:#93d4f0;}}.ctag.b{{border-color:rgba(212,160,23,.4);color:#d4a017;}}.hash-grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}}.hash-card{{background:var(--mid);border:1px solid var(--line);padding:18px;text-align:center;}}.hc-title{{font-family:Oswald,sans-serif;font-weight:800;font-size:15px;letter-spacing:.14em;text-transform:uppercase;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--line);}}.hbig{{font-family:Oswald,sans-serif;font-weight:900;font-size:50px;line-height:1;margin-bottom:2px;}}.hsub{{font-size:13px;color:rgba(240,237,232,.62);margin-bottom:10px;}}.hrp{{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;}}.hrp-item{{background:rgba(240,237,232,.04);padding:7px;}}.hrp-lbl{{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:rgba(240,237,232,.62);}}.hrp-val{{font-family:Oswald,sans-serif;font-weight:700;font-size:21px;}}.htc{{font-family:Inter,sans-serif;font-size:13px;color:rgba(240,237,232,.62);}}.sit-table{{width:100%;border-collapse:collapse;font-size:15px;}}.sit-table th{{background:var(--field);padding:7px 10px;font-family:Oswald,sans-serif;font-weight:700;font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:rgba(240,237,232,.7);border:1px solid var(--line);text-align:center;}}.sit-table th:first-child{{text-align:left;}}.sit-table td{{border:1px solid var(--line);padding:8px 12px;}}.sit-table tr:nth-child(odd) td{{background:rgba(240,237,232,.02);}}.sit-table tr:nth-child(even) td{{background:var(--mid);}}.sit-lbl{{font-family:Oswald,sans-serif;font-weight:700;font-size:15px;white-space:nowrap;}}.con-grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;}}.alert-box{{background:var(--mid);border:1px solid var(--line);border-left:4px solid var(--red);padding:16px 20px;}}</style>
 </head><body>
 <nav><div style="display:flex;align-items:center;gap:10px"><img src="{LOGO_DATA_URI}" style="height:32px;width:auto"/><div class="logo">DEFENSIVE<span>IQ</span></div></div><div style="font-family:Share Tech Mono,monospace;font-size:10px;color:rgba(240,237,232,.4)">OPPONENT OFFENSIVE TENDENCY REPORT</div></nav>
 <div class="wrap">
 <div class="rpt-hdr"><div><div class="eyebrow">// Defensive Coordinator — Opponent Scouting Report</div><div class="rpt-title">{opp} — Offensive Analysis</div></div><div class="rpt-meta">WEEK {week}{("<br>"+date) if date else ""}<br>{total} PLAYS ANALYZED</div></div>
 <div class="sum-grid">
   <div class="sum-card"><div class="sum-lbl">Total Plays</div><div class="sum-val">{total}</div></div>
-  <div class="sum-card"><div class="sum-lbl">Run %</div><div class="sum-val" style="color:#c0392b">{pct(len(runs),total)}%</div></div>
+  <div class="sum-card"><div class="sum-lbl">Run %</div><div class="sum-val" style="color:#D2011A">{pct(len(runs),total)}%</div></div>
   <div class="sum-card"><div class="sum-lbl">Pass %</div><div class="sum-val" style="color:#5dade2">{pct(len(passes),total)}%</div></div>
   <div class="sum-card"><div class="sum-lbl">Avg Yds/Play</div><div class="sum-val" style="color:#d4a017">{_avg(plays):.1f}</div></div>
   <div class="sum-card"><div class="sum-lbl">Expl. Play %</div><div class="sum-val" style="color:#0e7060">{pct(len([p for p in plays if p["expl"]]),total)}%</div></div>
@@ -3296,7 +3296,7 @@ def build_html(plays, opp, week, date):
 </div></body></html>'''
 
 # ── STREAMLIT UI ──────────────────────────────────────────────
-st.markdown(f'<div style="display:flex;align-items:center;gap:18px;margin-bottom:4px"><img src="{LOGO_DATA_URI}" style="height:72px;width:auto"/><div class="main-title" style="margin-bottom:0">Defensive<span style="color:#c0392b">IQ</span></div></div>', unsafe_allow_html=True)
+st.markdown(f'<div style="display:flex;align-items:center;gap:18px;margin-bottom:4px"><img src="{LOGO_DATA_URI}" style="height:72px;width:auto"/><div class="main-title" style="margin-bottom:0">Defensive<span style="color:#D2011A">IQ</span></div></div>', unsafe_allow_html=True)
 st.markdown('<div style="font-size:16px;color:rgba(240,237,232,.55);margin-bottom:24px;font-weight:300">Scout your next opponent\'s offense. Upload their playlist and uncover every tendency — formations, concepts, runs, passes, hashes, and situations — to build your defensive game plan.</div>', unsafe_allow_html=True)
 
 st.divider()
@@ -3307,8 +3307,8 @@ with col3: date = st.text_input("Game Date", placeholder="e.g. Nov 7, 2026")
 
 st.markdown("**Presentation Colors** — used for your scouting PowerPoint")
 cc1, cc2 = st.columns(2)
-with cc1: team_primary = st.color_picker("Primary (headers/titles)", "#16213E")
-with cc2: team_accent = st.color_picker("Accent (highlights)", "#C0392B")
+with cc1: team_primary = st.color_picker("Primary (headers/titles)", "#0D0D0D")
+with cc2: team_accent = st.color_picker("Accent (highlights)", "#D2011A")
 
 st.markdown("---")
 uploaded = st.file_uploader("Upload Opponent Offensive Playlist (.xlsx or .csv)", type=['xlsx', 'xls', 'csv'],
