@@ -1633,6 +1633,8 @@ html,body,[class*="css"]{{font-family:'Barlow',sans-serif;background-color:#0D0D
 [data-testid="stFileUploaderDropzone"]:hover{{border-color:#D2011A!important;background:rgba(210,1,26,.12)!important;}}
 [data-testid="stFileUploaderDropzone"] button{{border-color:#D2011A!important;color:#D2011A!important;}}
 [data-testid="stFileUploaderDropzone"] button:hover{{background:rgba(210,1,26,.15)!important;}}
+[data-testid="stMetric"]{{background:rgba(255,255,255,.035);border-left:4px solid #D2011A;border-radius:2px;padding:14px 16px 12px 16px;}}
+@keyframes diq-pulse{{0%,100%{{transform:scale(1);filter:drop-shadow(0 0 0px rgba(210,1,26,0));}}50%{{transform:scale(1.1);filter:drop-shadow(0 0 20px rgba(210,1,26,.85));}}}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -3320,32 +3322,39 @@ uploaded = st.file_uploader("Upload Opponent Offensive Playlist (.xlsx or .csv)"
                              help="Export the opponent's offensive playlist from Hudl as Excel or CSV and upload here.")
 
 if uploaded and st.button("🛡️ RUN ANALYSIS"):
-    with st.spinner("Unleashing the Demons on this film..."):
-        try:
-            if uploaded.name.lower().endswith('.csv'):
-                df = pd.read_csv(uploaded)
-            else:
-                df = pd.read_excel(uploaded)
+    loading_ph = st.empty()
+    loading_ph.markdown(f'''
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:50px 0;">
+      <img src="{LOGO_DATA_URI}" style="height:100px;animation:diq-pulse 1.1s ease-in-out infinite;" />
+      <div style="margin-top:18px;color:#f0ede8;font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:.1em;text-transform:uppercase;font-size:16px;">Unleashing the Demons on this film...</div>
+    </div>
+    ''', unsafe_allow_html=True)
+    try:
+        if uploaded.name.lower().endswith('.csv'):
+            df = pd.read_csv(uploaded)
+        else:
+            df = pd.read_excel(uploaded)
 
-            df, matched, missing = map_columns(df)
-            with st.expander("📋 Column mapping — what we found in your file"):
-                st.write("**Matched:** " + (", ".join(matched.keys()) if matched else "none"))
-                if missing:
-                    st.info("Not found (those sections will be blank): " + ", ".join(missing))
+        df, matched, missing = map_columns(df)
+        loading_ph.empty()
+        with st.expander("📋 Column mapping — what we found in your file"):
+            st.write("**Matched:** " + (", ".join(matched.keys()) if matched else "none"))
+            if missing:
+                st.info("Not found (those sections will be blank): " + ", ".join(missing))
 
-            req_missing = check_required(matched)
-            if req_missing:
-                st.error("Your file is missing required column(s): " + ", ".join(req_missing))
-                st.info("These are needed to analyze anything. Check that your export includes "
-                        "Play Type (Run/Pass), Yard Line, Down, and Distance — then re-export and try again.")
-                st.stop()
+        req_missing = check_required(matched)
+        if req_missing:
+            st.error("Your file is missing required column(s): " + ", ".join(req_missing))
+            st.info("These are needed to analyze anything. Check that your export includes "
+                    "Play Type (Run/Pass), Yard Line, Down, and Distance — then re-export and try again.")
+            st.stop()
 
-            plays = load_plays(df)
-            if len(plays) == 0:
-                st.error("No Run/Pass plays found in this file.")
-                st.info("Common causes: PLAY TYPE uses different words than 'Run'/'Pass', or YARD LN is blank. "
-                        "Open the column mapping above to see what we detected.")
-            else:
+        plays = load_plays(df)
+        if len(plays) == 0:
+            st.error("No Run/Pass plays found in this file.")
+            st.info("Common causes: PLAY TYPE uses different words than 'Run'/'Pass', or YARD LN is blank. "
+                    "Open the column mapping above to see what we detected.")
+        else:
                 opp_name = opp or "Opponent"
                 prog = st.progress(0, "Devouring the film...")
                 prog.progress(30, "Hunting down field-zone tendencies...")
@@ -3407,13 +3416,14 @@ if uploaded and st.button("🛡️ RUN ANALYSIS"):
                 else:
                     st.markdown("*Not enough tagged snaps yet to compute headline tendencies.*")
 
-        except Exception as e:
-            import traceback
-            st.error("Something went wrong reading this file — it may be formatted differently than expected.")
-            st.info("Check that this is a Hudl playlist export with PLAY TYPE, YARD LN, OFF FORM, DN, DIST, "
-                    "HASH, and a concept column (OFF PLAY / PASS CONCEPT).")
-            with st.expander("🔧 Technical details"):
-                st.code(traceback.format_exc())
+    except Exception as e:
+        loading_ph.empty()
+        import traceback
+        st.error("Something went wrong reading this file — it may be formatted differently than expected.")
+        st.info("Check that this is a Hudl playlist export with PLAY TYPE, YARD LN, OFF FORM, DN, DIST, "
+                "HASH, and a concept column (OFF PLAY / PASS CONCEPT).")
+        with st.expander("🔧 Technical details"):
+            st.code(traceback.format_exc())
 
 st.divider()
 st.markdown('<div style="font-family:Share Tech Mono,monospace;font-size:10px;color:rgba(240,237,232,.25);text-align:center;padding:20px 0">© 2026 DEFENSIVEIQ · BUILT FOR DEFENSIVE COORDINATORS</div>', unsafe_allow_html=True)
