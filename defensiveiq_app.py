@@ -1860,6 +1860,58 @@ def compute_heavy_pass_situations(plays):
         heavy.append(f"2nd & 10+: {pct(len([p for p in sl if p['rp']=='Pass']), len(sl))}% Pass")
     return heavy
 
+def compute_bread_and_butter(plays, top_n=5):
+    """One ranked master list combining the highest-confidence signals from
+    formation/backfield run-pass skew, dominant per-formation concepts, and
+    heavy-pass situations — a single 'if you only remember 5 things' page."""
+    candidates = []
+
+    for key in ('form', 'backfield'):
+        groups = {}
+        for p in plays:
+            v = str(p.get(key, '')).strip()
+            if v in ('', 'nan', 'None'): continue
+            groups.setdefault(v, []).append(p)
+        for v, g in groups.items():
+            if len(g) < 5: continue
+            n_run = len([p for p in g if p['rp'] == 'Run'])
+            run_rate = n_run / len(g)
+            if run_rate >= 0.85:
+                candidates.append((run_rate * len(g), f"{v} = {round(run_rate*100)}% Run   [{len(g)} snaps]"))
+            elif (1 - run_rate) >= 0.85:
+                candidates.append(((1 - run_rate) * len(g), f"{v} = {round((1-run_rate)*100)}% Pass   [{len(g)} snaps]"))
+
+    fgroups = {}
+    for p in plays:
+        f = p['form']
+        if f.strip() in ('', 'nan', 'None'): continue
+        fgroups.setdefault(f, []).append(p)
+    for f, g in fgroups.items():
+        if len(g) < 3: continue
+        cc = Counter(str(p['concept']) for p in g if str(p['concept']).strip() not in ('', 'nan', 'None'))
+        if not cc: continue
+        concept, n = cc.most_common(1)[0]
+        share = n / len(g)
+        if share >= 0.5:
+            candidates.append((share * len(g) * 0.9,
+                                f"Out of {f}, they lean on {concept} ({round(share*100)}% of snaps)   [{len(g)} snaps]"))
+
+    tl = [p for p in plays if p['dn'] == 3 and p['dist'] >= 8]
+    if len(tl) >= 3:
+        pr = len([p for p in tl if p['rp'] == 'Pass']) / len(tl)
+        candidates.append((pr * len(tl) * 1.15, f"3rd & 8+: {round(pr*100)}% Pass   [{len(tl)} snaps]"))
+    tm = [p for p in plays if p['dn'] == 3 and p['dist'] >= 5]
+    if len(tm) >= 3:
+        pr = len([p for p in tm if p['rp'] == 'Pass']) / len(tm)
+        candidates.append((pr * len(tm) * 1.1, f"2-Min (3rd & 5+): {round(pr*100)}% Pass   [{len(tm)} snaps]"))
+    sl = [p for p in plays if p['dn'] == 2 and p['dist'] >= 10]
+    if len(sl) >= 3:
+        pr = len([p for p in sl if p['rp'] == 'Pass']) / len(sl)
+        candidates.append((pr * len(sl), f"2nd & 10+: {round(pr*100)}% Pass   [{len(sl)} snaps]"))
+
+    candidates.sort(key=lambda t: -t[0])
+    return [txt for _, txt in candidates[:top_n]]
+
 def _jersey(v):
     """Format a raw passer/rusher/receiver cell as a display label like '#12'."""
     s = str(v).strip()
@@ -2187,11 +2239,14 @@ def build_pptx(plays, opp, week, date, primary_hex="#0D0D0D", accent_hex="#D2011
     _concept_table(Inches(1.1), "TOP 5 RUN CONCEPTS", "Run", P_RED)
     _concept_table(Inches(4.15), "TOP 5 PASS CONCEPTS", "Pass", P_BLUE)
 
-    # SLIDE 8 — Top 5 Biggest Tendencies
+    # SLIDE 8 — Bread & Butter (Top 5 things to remember)
     s = _p_slide(prs, PRIMARY)
     _p_text(s, Inches(0.6), Inches(0.4), Inches(12), Inches(0.8),
-            "TOP 5 BIGGEST TENDENCIES", 32, ACCENT_ON_PRIMARY, bold=True, font="Cambria")
-    big5 = compute_biggest_tendencies(plays, top_n=5)
+            "BREAD & BUTTER \u2014 TOP 5 THINGS TO REMEMBER", 28, ACCENT_ON_PRIMARY, bold=True, font="Cambria")
+    _p_text(s, Inches(0.6), Inches(1.15), Inches(12), Inches(0.35),
+            "The single highest-confidence signals across formations, concepts, and situations.", 12,
+            RGBColor(0x8A, 0x9A, 0xBA), italic=True)
+    big5 = compute_bread_and_butter(plays, top_n=5)
     yy = Inches(1.6)
     for i, txt in enumerate(big5):
         _p_rect(s, Inches(0.8), yy, Inches(0.5), Inches(0.55), ACCENT)
@@ -2203,7 +2258,7 @@ def build_pptx(plays, opp, week, date, primary_hex="#0D0D0D", accent_hex="#D2011
         _p_text(s, Inches(0.8), Inches(2), Inches(11), Inches(0.5),
                 "Not enough tagged snaps to compute tendencies yet.", 14, RGBColor(0x8A, 0x9A, 0xBA), italic=True)
     _p_text(s, Inches(0.6), Inches(6.55), Inches(12), Inches(0.3),
-            "Tendencies require a minimum sample size — verify against film before installing.", 10,
+            "Pulled from formation/backfield skew, dominant per-formation concepts, and heavy-pass situations \u2014 verify against film before installing.", 10,
             RGBColor(0x8A, 0x9A, 0xBA), italic=True)
 
     # SLIDE 9 — Form Family / FIB / Open-Closed Tendencies
