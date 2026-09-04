@@ -2454,6 +2454,23 @@ def build_excel(plays, opp, week, date):
     def widths(ws, lst):
         for i, w in enumerate(lst, 1): ws.column_dimensions[gcl(i)].width = w
 
+    def print_friendly(ws, repeat_rows="1:2", one_page=False):
+        """Landscape + fit-to-width so these wide tendency tables print
+        cleanly without columns getting cut off, plus repeating header
+        rows and page numbers for anything that spans multiple pages."""
+        ws.page_setup.orientation = "landscape"
+        ws.page_setup.fitToPage = True
+        ws.page_setup.fitToWidth = 1
+        ws.page_setup.fitToHeight = 1 if one_page else 0
+        if repeat_rows:
+            ws.print_title_rows = repeat_rows
+        ws.page_margins.left = 0.3; ws.page_margins.right = 0.3
+        ws.page_margins.top = 0.4; ws.page_margins.bottom = 0.4
+        ws.page_margins.header = 0.2; ws.page_margins.footer = 0.2
+        ws.oddFooter.center.text = "Page &P of &N"
+        ws.oddFooter.center.size = 8
+        ws.oddFooter.center.color = "999999"
+
     total = len(plays)
     runs = [p for p in plays if p['rp'] == 'Run']
     passes = [p for p in plays if p['rp'] == 'Pass']
@@ -2495,6 +2512,7 @@ def build_excel(plays, opp, week, date):
             sc(ws_log, r, ci, vals.get(col, ''), sz=9, bg=zbg, fc="FF000000",
                h="left" if col in ("OFF FORM", "CONCEPT", "RESULT", "BACKFIELD") else "center")
     ws_log.freeze_panes = "A3"
+    print_friendly(ws_log, "1:2")
     _wm = XLImage(_faded_logo_stream(6))
     _wm.width, _wm.height = 480, 458
     ws_log.add_image(_wm, "E6")
@@ -2547,6 +2565,7 @@ def build_excel(plays, opp, week, date):
             row += 1
         row += 1
     ws2.freeze_panes = "C4"
+    print_friendly(ws2, "1:3")
 
     # ── Tab 3: Run Tendencies (by zone) ──────────────────────
     ws3 = wb2.create_sheet("3. Run Tendencies")
@@ -2576,6 +2595,7 @@ def build_excel(plays, opp, week, date):
         for i, cn in enumerate([8, 9, 10]): sc(ws3, r, cn, t3c[i], sz=9, bg=zbg, wrap=True)
         for i, cn in enumerate([11, 12, 13]): sc(ws3, r, cn, t3d[i], sz=9, bg=zbg, wrap=True)
     ws3.freeze_panes = "B4"
+    print_friendly(ws3, "1:3")
 
     # ── Tab 4: Pass Tendencies (by zone) ─────────────────────
     ws4 = wb2.create_sheet("4. Pass Tendencies")
@@ -2605,6 +2625,7 @@ def build_excel(plays, opp, week, date):
         for i, cn in enumerate([8, 9, 10]): sc(ws4, r, cn, t3c[i], sz=9, bg=zbg, wrap=True)
         for i, cn in enumerate([11, 12, 13]): sc(ws4, r, cn, t3b[i], sz=9, bg=zbg, wrap=True)
     ws4.freeze_panes = "B4"
+    print_friendly(ws4, "1:3")
 
     # ── Tab 5: Hash Tendencies ───────────────────────────────
     ws5 = wb2.create_sheet("5. Hash Tendencies")
@@ -2638,6 +2659,7 @@ def build_excel(plays, opp, week, date):
         hash_row(ws5, ri + 4, f"{zcode} \u2014 {ZONE_NAMES[zcode]}", [p for p in plays if p['zone'] == zcode],
                  ZONE_HDR[zcode], ZONE_BG[zcode])
     ws5.freeze_panes = "A3"
+    print_friendly(ws5, "1:2")
 
     # ── Tab 6: Down & Distance ────────────────────────────────
     ws6 = wb2.create_sheet("6. Down & Distance")
@@ -2664,6 +2686,7 @@ def build_excel(plays, opp, week, date):
         for i, cn in enumerate([8, 9, 10]): sc(ws6, r, cn, t3pc[i], sz=9, bg=CPB, wrap=True)
         for i, cn in enumerate([11, 12, 13]): sc(ws6, r, cn, t3f[i], sz=9, bg="FFEDE7F6", wrap=True)
     ws6.freeze_panes = "B3"
+    print_friendly(ws6, "1:2")
 
     # ── Tab 7 / 8: Concept-level analysis (Run / Pass) ───────
     def concept_tab(ws, rp_filter, title, accent, min_n=1):
@@ -2722,6 +2745,7 @@ def build_excel(plays, opp, week, date):
         ws.cell(row=fr, column=1, value="* = small sample (under 5 calls) — read with caution").font = Font(
             name=FN, sz=8, italic=True, color=CDG)
         ws.freeze_panes = "B3"
+        print_friendly(ws, "1:2")
 
     ws7 = wb2.create_sheet("7. Run Concepts"); ws7.sheet_properties.tabColor = "D2011A"
     concept_tab(ws7, "Run", "RUN CONCEPTS  \u2014  Explosive (10+) & Success Rate by Concept (All Calls)", "FFD2011A")
@@ -2771,6 +2795,7 @@ def build_excel(plays, opp, week, date):
         c = ws9.cell(row=3, column=1, value="Not enough formation data tagged.")
         c.font = Font(name=FN, sz=10, italic=True, color=CDG); c.alignment = Alignment(horizontal="center")
     ws9.freeze_panes = "B3"
+    print_friendly(ws9, "1:2")
 
     # ── Tab 10: Situational Summary ───────────────────────────
     ws10 = wb2.create_sheet("10. Situational Summary")
@@ -2832,6 +2857,7 @@ def build_excel(plays, opp, week, date):
         sc(ws10, r, 9, "", bg=CYB, sz=9, wrap=True, v="top")
         sc(ws10, r, 10, "", bg=CL if ri % 2 == 0 else CW, sz=9, wrap=True, v="top")
     ws10.freeze_panes = "D3"
+    print_friendly(ws10, "1:2")
 
     # ── Tab 11: Call Sheet Builder ─────────────────────────────
     ws11 = wb2.create_sheet("11. Call Sheet Builder")
@@ -2882,6 +2908,7 @@ def build_excel(plays, opp, week, date):
             sc(ws11, r, ci, "", bg=CYB, sz=9, wrap=True, v="top")
         r += 1
     ws11.freeze_panes = "B3"
+    print_friendly(ws11, "1:2")
 
     # ── Tab 12: Game Day Call Sheet (printable one-pager) ─────
     ws12 = wb2.create_sheet("12. Game Day Call Sheet")
@@ -3025,6 +3052,7 @@ def build_excel(plays, opp, week, date):
             c = ws.cell(row=3, column=1, value="Not enough tagged data for this section.")
             c.font = Font(name=FN, sz=10, italic=True, color=CDG); c.alignment = Alignment(horizontal="center")
         ws.freeze_panes = "B3"
+        print_friendly(ws, "1:2")
 
     ws13 = wb2.create_sheet("13. Form Family Tendencies")
     group_tab(ws13, 'form_family', "FORM FAMILY TENDENCIES  \u2014  Run/Pass Split, Favorite Plays & Formations",
@@ -3078,6 +3106,7 @@ def build_excel(plays, opp, week, date):
             c.font = Font(name=FN, sz=10, italic=True, color=CDG); c.alignment = Alignment(horizontal="center")
             row = 4
         ws.freeze_panes = "B3"
+        print_friendly(ws, "1:2")
 
         # ── Cross-break: Open/Closed within each Formation Family ──
         row += 1
@@ -3217,6 +3246,7 @@ def build_excel(plays, opp, week, date):
         row += 1
 
     ws15.freeze_panes = "A2"
+    print_friendly(ws15, repeat_rows=None, one_page=True)
 
     # ── Cover Tab (inserted first) ─────────────────────────────
     ws_cov = wb2.create_sheet("0. Cover", 0)
