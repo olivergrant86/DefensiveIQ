@@ -1634,6 +1634,8 @@ html,body,[class*="css"]{{font-family:'Barlow',sans-serif;background-color:#0D0D
 [data-testid="stFileUploaderDropzone"] button{{border-color:#D2011A!important;color:#D2011A!important;}}
 [data-testid="stFileUploaderDropzone"] button:hover{{background:rgba(210,1,26,.15)!important;}}
 [data-testid="stMetric"]{{background:rgba(255,255,255,.035);border-left:4px solid #D2011A;border-radius:2px;padding:14px 16px 12px 16px;}}
+[data-testid="stColorPicker"] button{{border:2px solid rgba(255,255,255,.45)!important;border-radius:4px!important;}}
+[data-testid="stColorPicker"] button:hover{{border-color:#D2011A!important;}}
 @keyframes diq-pulse{{0%,100%{{transform:scale(1);filter:drop-shadow(0 0 0px rgba(210,1,26,0));}}50%{{transform:scale(1.1);filter:drop-shadow(0 0 20px rgba(210,1,26,.85));}}}}
 </style>
 """, unsafe_allow_html=True)
