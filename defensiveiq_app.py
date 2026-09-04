@@ -3410,6 +3410,18 @@ def build_html(plays, opp, week, date):
 # ── STREAMLIT UI ──────────────────────────────────────────────
 st.markdown(f'<div style="display:flex;align-items:center;gap:18px;margin-bottom:4px"><img src="{LOGO_DATA_URI}" style="height:72px;width:auto"/><div class="main-title" style="margin-bottom:0">Defensive<span style="color:#D2011A">IQ</span></div></div>', unsafe_allow_html=True)
 st.markdown('<div style="font-size:16px;color:rgba(240,237,232,.55);margin-bottom:24px;font-weight:300">Scout your next opponent\'s offense. Upload their playlist and uncover every tendency — formations, concepts, runs, passes, hashes, and situations — to build your defensive game plan.</div>', unsafe_allow_html=True)
+st.markdown('''
+<div style="background:rgba(255,255,255,.035);border-left:4px solid #D2011A;border-radius:2px;padding:16px 20px;margin-bottom:28px;">
+  <div style="font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#D2011A;margin-bottom:10px;">How to get your playlist</div>
+  <ol style="margin:0;padding-left:20px;color:rgba(240,237,232,.85);font-size:14px;line-height:1.9;">
+    <li>In the new Hudl, click the playlist you want to break down.</li>
+    <li>Click the 3 dots to the right of the playlist after you've already clicked and loaded the video.</li>
+    <li>Click <strong>EXPORT DATA</strong>.</li>
+    <li>Make sure <strong>All Fields</strong> is selected and hit download.</li>
+    <li>Upload the downloaded playlist below by clicking the upload button and selecting the file from Downloads in your file explorer.</li>
+  </ol>
+</div>
+''', unsafe_allow_html=True)
 
 st.divider()
 col1, col2, col3 = st.columns(3)
