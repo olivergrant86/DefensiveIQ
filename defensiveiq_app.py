@@ -1637,6 +1637,7 @@ html,body,[class*="css"]{{font-family:'Barlow',sans-serif;background-color:#0D0D
 [data-testid="stColorPicker"] button{{border:2px solid rgba(255,255,255,.45)!important;border-radius:4px!important;}}
 [data-testid="stColorPicker"] button:hover{{border-color:#D2011A!important;}}
 @keyframes diq-pulse{{0%,100%{{transform:scale(1);filter:drop-shadow(0 0 0px rgba(210,1,26,0));}}50%{{transform:scale(1.1);filter:drop-shadow(0 0 20px rgba(210,1,26,.85));}}}}
+[data-testid="stDivider"] hr, hr{{border:none!important;height:2px!important;background:linear-gradient(90deg,rgba(210,1,26,.7),rgba(210,1,26,.05))!important;margin:1.4rem 0!important;}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -3247,6 +3248,23 @@ def build_excel(plays, opp, week, date):
     c = ws_cov.cell(row=23, column=2, value="Auto-generated from film \u2014 see the tabs below for the full breakdown.")
     c.font = Font(name=FN, size=10, italic=True, color="FF999999")
     c.alignment = Alignment(horizontal="center", vertical="center")
+
+    # Decorative frame around the printable cover page
+    _frame_side = Side(style="thick", color="FFD2011A")
+    _first_row, _last_row = 1, 25
+    _first_col, _last_col = 1, 13
+    for _r in range(_first_row, _last_row + 1):
+        for _c in range(_first_col, _last_col + 1):
+            if _r not in (_first_row, _last_row) and _c not in (_first_col, _last_col):
+                continue
+            _cell = ws_cov.cell(row=_r, column=_c)
+            _existing = _cell.border
+            _cell.border = Border(
+                top=_frame_side if _r == _first_row else _existing.top,
+                bottom=_frame_side if _r == _last_row else _existing.bottom,
+                left=_frame_side if _c == _first_col else _existing.left,
+                right=_frame_side if _c == _last_col else _existing.right,
+            )
 
     buf = io.BytesIO(); wb2.save(buf); buf.seek(0)
     return buf.getvalue()
