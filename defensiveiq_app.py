@@ -2665,7 +2665,7 @@ def build_excel(plays, opp, week, date):
     ws6 = wb2.create_sheet("6. Down & Distance")
     ws6.sheet_properties.tabColor = "0E7060"; ws6.sheet_view.showGridLines = False
     NC6 = 13
-    widths(ws6, [20, 8, 8, 8, 20, 20, 20, 20, 20, 20, 20, 20, 20])
+    widths(ws6, [20, 8, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20])
     banner(ws6, 1, "DOWN & DISTANCE TENDENCIES  —  Favorite Runs, Passes & Formations by Situation", NC6, bg=CTe, sz=13, ht=28)
     for c, txt, bg in [(1, "SITUATION", CB), (2, "Plays", CB), (3, "Run%", CB), (4, "Pass%", CB),
                        (5, "#1 Run Concept", CR), (6, "#2 Run Concept", CR), (7, "#3 Run Concept", CR),
@@ -2685,6 +2685,55 @@ def build_excel(plays, opp, week, date):
         for i, cn in enumerate([5, 6, 7]): sc(ws6, r, cn, t3rc[i], sz=9, bg=CRB, wrap=True)
         for i, cn in enumerate([8, 9, 10]): sc(ws6, r, cn, t3pc[i], sz=9, bg=CPB, wrap=True)
         for i, cn in enumerate([11, 12, 13]): sc(ws6, r, cn, t3f[i], sz=9, bg="FFEDE7F6", wrap=True)
+
+    # ── Below-table add-on: top 3 run/pass plays (+ formation) per down ──
+    row = 16
+    NC6B = 14
+    banner(ws6, row, "TOP 3 RUN & PASS PLAYS BY DOWN  \u2014  with Formation Most Commonly Run From", NC6B, bg=CTe, sz=12, ht=26)
+    row += 1
+    for c, txt, bg in [(1, "DOWN", CB), (2, "Snaps", CB),
+                       (3, "#1 Run Play", CR), (4, "Formation", CR),
+                       (5, "#2 Run Play", CR), (6, "Formation", CR),
+                       (7, "#3 Run Play", CR), (8, "Formation", CR),
+                       (9, "#1 Pass Play", CBl), (10, "Formation", CBl),
+                       (11, "#2 Pass Play", CBl), (12, "Formation", CBl),
+                       (13, "#3 Pass Play", CBl), (14, "Formation", CBl)]:
+        hdr(ws6, row, c, txt, bg=bg, sz=8, wrap=True)
+    row += 1
+
+    def _top3_play_and_form(sp, rp_filter, n=3):
+        g = [p for p in sp if p['rp'] == rp_filter]
+        cc = Counter(str(p['concept']) for p in g if str(p['concept']).strip() not in ('', 'nan', 'None'))
+        top = cc.most_common(n)
+        out = []
+        for concept, cnt in top:
+            fg = [p for p in g if str(p['concept']) == concept]
+            fc2 = Counter(str(p['form']) for p in fg if str(p['form']).strip() not in ('', 'nan', 'None'))
+            form = fc2.most_common(1)[0][0] if fc2 else "\u2014"
+            out.append((f"{concept} ({cnt})", form))
+        while len(out) < n:
+            out.append(("\u2014", "\u2014"))
+        return out
+
+    down_labels = {1: "1st Down", 2: "2nd Down", 3: "3rd Down", 4: "4th Down"}
+    for ri, dn_v in enumerate([1, 2, 3, 4]):
+        r = row + ri
+        ws6.row_dimensions[r].height = 24
+        bg = CL if ri % 2 == 0 else CW
+        sp = [p for p in plays if p['dn'] == dn_v]
+        top_runs = _top3_play_and_form(sp, 'Run')
+        top_passes = _top3_play_and_form(sp, 'Pass')
+        sc(ws6, r, 1, down_labels[dn_v], bold=True, sz=10, fc=CW, bg=CTe, h="left")
+        sc(ws6, r, 2, len(sp), bold=True, sz=10, fc="FF000000", bg=bg, fmt="0")
+        col = 3
+        for play, form in top_runs:
+            sc(ws6, r, col, play, sz=9, fc="FF8B0000", bg=CRB, wrap=True, h="left")
+            sc(ws6, r, col + 1, form, sz=9, bg=CRB, wrap=True, h="left")
+            col += 2
+        for play, form in top_passes:
+            sc(ws6, r, col, play, sz=9, fc="FF00008B", bg=CPB, wrap=True, h="left")
+            sc(ws6, r, col + 1, form, sz=9, bg=CPB, wrap=True, h="left")
+            col += 2
     ws6.freeze_panes = "B3"
     print_friendly(ws6, "1:2")
 
