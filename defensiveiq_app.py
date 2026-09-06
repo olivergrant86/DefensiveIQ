@@ -1584,6 +1584,7 @@ COLUMN_ALIASES = {
     "RECEIVER":    ["OPP RECEIVER", "RECEIVER", "TARGET", "WR"],
     "BACK DEPTH":  ["BACK DEPTH", "BACKDEPTH", "DEPTH"],
     "OPEN/CLOSE":  ["OPEN/CLOSE", "OPEN/CLOSED", "OPEN CLOSE", "OPENCLOSE"],
+    "PLAY #":      ["PLAY #", "PLAY NUM", "PLAY NUMBER", "PLAYNUM", "PLAY NO"],
 }
 
 def _normalize(s):
@@ -1753,6 +1754,7 @@ def load_plays(df):
             'receiver': row.get('RECEIVER', ''),
             'back_depth': str(row.get('BACK DEPTH', '')).strip(),
             'open_close': str(row.get('OPEN/CLOSE', '')).strip(),
+            'play_num': row.get('PLAY #', ''),
         })
     return plays
 
@@ -1924,6 +1926,15 @@ def _jersey(v):
         return f"#{int(f)}"
     except (TypeError, ValueError):
         return f"#{s}"
+
+def _play_num(v):
+    """Format a raw PLAY # cell cleanly (handles float-from-Excel like 12.0)."""
+    s = str(v).strip()
+    if s in ('', 'nan', 'None'): return "\u2014"
+    try:
+        return str(int(float(s)))
+    except (TypeError, ValueError):
+        return s
 
 def compute_player_stats(plays):
     """Build Passing / Rushing / Receiving stat lines per player from
@@ -3300,12 +3311,18 @@ def build_excel(plays, opp, week, date):
     # ── Tab 18: Practice Scripts ────────────────────────────────
     ws16 = wb2.create_sheet("18. Practice Scripts")
     ws16.sheet_properties.tabColor = "0D0D0D"; ws16.sheet_view.showGridLines = False
-    NC16 = 5
-    widths(ws16, [10, 10, 24, 26, 32])
+    NC16 = 9
+    widths(ws16, [8, 8, 8, 10, 22, 24, 8, 10, 30])
+    _DN_ORD = {1: "1st", 2: "2nd", 3: "3rd", 4: "4th"}
 
-    def _script_allocate(group_plays, n_slots):
+    def _select_real_plays(group_plays, n_slots):
+        """Pick actual logged plays (not aggregates) for n_slots reps,
+        proportional to how often each concept is really called, preferring
+        the instance(s) tagged with that concept's most common formation."""
+        if not group_plays or n_slots <= 0:
+            return []
         cc = Counter(str(p['concept']) for p in group_plays if str(p['concept']).strip() not in ('', 'nan', 'None'))
-        if not cc or n_slots <= 0:
+        if not cc:
             return []
         total_calls = sum(cc.values())
         ranked = cc.most_common()
@@ -3318,27 +3335,34 @@ def build_excel(plays, opp, week, date):
             alloc[fracs[i % len(fracs)][0]] += 1
             remainder -= 1
             i += 1
-        result = []
+        selected = []
         for concept, _cnt in ranked:
             cnt = alloc.get(concept, 0)
             if cnt <= 0: continue
-            fg = [p for p in group_plays if str(p['concept']) == concept]
-            fc2 = Counter(str(p['form']) for p in fg if str(p['form']).strip() not in ('', 'nan', 'None'))
-            form = fc2.most_common(1)[0][0] if fc2 else "\u2014"
-            for _ in range(cnt):
-                result.append((concept, form))
-        return result
+            concept_plays = [p for p in group_plays if str(p['concept']) == concept]
+            fc2 = Counter(str(p['form']) for p in concept_plays if str(p['form']).strip() not in ('', 'nan', 'None'))
+            top_form = fc2.most_common(1)[0][0] if fc2 else None
+            preferred = [p for p in concept_plays if str(p['form']) == top_form] if top_form else []
+            others = [p for p in concept_plays if p not in preferred]
+            pool = preferred + others
+            chosen = list(pool[:cnt])
+            while len(chosen) < cnt and pool:
+                chosen.append(pool[len(chosen) % len(pool)])
+            selected.extend(chosen[:cnt])
+        return selected
 
-    def _build_script(down_plays, total_reps=15):
+    def _build_script(down_plays, total_reps):
+        """Real plays, run/pass split matched to their actual tendency,
+        proportionally weighted toward their most-called plays."""
         if not down_plays:
             return []
         runs = [p for p in down_plays if p['rp'] == 'Run']
         passes = [p for p in down_plays if p['rp'] == 'Pass']
-        run_pct = len(runs) / len(down_plays)
+        run_pct = len(runs) / len(down_plays) if down_plays else 0
         n_runs = max(0, min(total_reps, round(total_reps * run_pct)))
         n_passes = total_reps - n_runs
-        run_script = _script_allocate(runs, n_runs)
-        pass_script = _script_allocate(passes, n_passes)
+        run_script = _select_real_plays(runs, n_runs)
+        pass_script = _select_real_plays(passes, n_passes)
         script = []
         i_r = i_p = 0
         nr, npass = len(run_script), len(pass_script)
@@ -3346,53 +3370,117 @@ def build_excel(plays, opp, week, date):
             r_ratio = i_r / nr if nr else 1
             p_ratio = i_p / npass if npass else 1
             if nr and (not npass or r_ratio <= p_ratio):
-                script.append(('Run',) + run_script[i_r]); i_r += 1
+                script.append(run_script[i_r]); i_r += 1
             else:
-                script.append(('Pass',) + pass_script[i_p]); i_p += 1
+                script.append(pass_script[i_p]); i_p += 1
         return script
 
-    down_groups = [
-        ("1ST DOWN PRACTICE SCRIPT", [p for p in plays if p['dn'] == 1]),
-        ("2ND DOWN PRACTICE SCRIPT", [p for p in plays if p['dn'] == 2]),
-        ("3RD / 4TH DOWN PRACTICE SCRIPT", [p for p in plays if p['dn'] in (3, 4)]),
-    ]
+    def _write_script_rows(ws, start_row, script):
+        r = start_row
+        for i, p in enumerate(script, 1):
+            bg = CL if i % 2 == 0 else CW
+            play_type = p['rp']
+            type_color = "FF8B0000" if play_type == "Run" else "FF00008B"
+            type_bg = CRB if play_type == "Run" else CPB
+            sc(ws, r, 1, i, bold=True, sz=9, fc="FF000000", bg=bg, fmt="0")
+            sc(ws, r, 2, play_type, bold=True, sz=9, fc=type_color, bg=type_bg)
+            sc(ws, r, 3, _DN_ORD.get(p['dn'], str(p['dn'])), sz=9, bg=bg)
+            sc(ws, r, 4, p['dist'], sz=9, bg=bg, fmt="0")
+            sc(ws, r, 5, p['concept'], bold=True, sz=9, fc="FF000000", bg=bg, h="left")
+            sc(ws, r, 6, p['form'], sz=9, bg=bg, h="left")
+            sc(ws, r, 7, p['hash'] or "\u2014", sz=9, bg=bg)
+            sc(ws, r, 8, _play_num(p.get('play_num', '')), sz=9, bg=bg)
+            sc(ws, r, 9, "", sz=9, bg=CYB)
+            r += 1
+        return r
 
     row = 1
-    for title, down_plays in down_groups:
-        n_total = len(down_plays)
-        run_n = len([p for p in down_plays if p['rp'] == 'Run'])
-        run_pct_disp = round(run_n / n_total * 100) if n_total else 0
-        pass_pct_disp = 100 - run_pct_disp if n_total else 0
-        banner(ws16, row, title, NC16, bg=CB, sz=13, ht=26)
-        row += 1
+
+    # ── 1st & 2nd Down (combined) ──
+    combo_plays = [p for p in plays if p['dn'] in (1, 2)]
+    n_total = len(combo_plays)
+    run_n = len([p for p in combo_plays if p['rp'] == 'Run'])
+    run_pct_disp = round(run_n / n_total * 100) if n_total else 0
+    pass_pct_disp = 100 - run_pct_disp if n_total else 0
+    banner(ws16, row, "1ST & 2ND DOWN PRACTICE SCRIPT", NC16, bg=CB, sz=13, ht=26)
+    row += 1
+    ws16.merge_cells(start_row=row, start_column=1, end_row=row, end_column=NC16)
+    _sub = ws16.cell(row=row, column=1,
+                      value=f"Based on their actual {run_pct_disp}% Run / {pass_pct_disp}% Pass split \u2014 {n_total} snaps tagged")
+    _sub.font = Font(name=FN, size=9, italic=True, color=CDG)
+    _sub.alignment = Alignment(horizontal="center", vertical="center")
+    ws16.row_dimensions[row].height = 16
+    row += 1
+    for c, txt, bg in [(1, "REP #", CTe), (2, "TYPE", CTe), (3, "DOWN", CTe), (4, "DIST", CTe),
+                       (5, "PLAY", CTe), (6, "FORMATION", CTe), (7, "HASH", CTe), (8, "PLAY #", CTe), (9, "NOTES", CTe)]:
+        hdr(ws16, row, c, txt, bg=bg, sz=9)
+    row += 1
+    script = _build_script(combo_plays, 20)
+    if not script:
         ws16.merge_cells(start_row=row, start_column=1, end_row=row, end_column=NC16)
-        _sub = ws16.cell(row=row, column=1,
-                          value=f"Based on their actual {run_pct_disp}% Run / {pass_pct_disp}% Pass split \u2014 {n_total} snaps tagged")
-        _sub.font = Font(name=FN, size=9, italic=True, color=CDG)
-        _sub.alignment = Alignment(horizontal="center", vertical="center")
-        ws16.row_dimensions[row].height = 16
+        c = ws16.cell(row=row, column=1, value="Not enough tagged data for 1st/2nd down to build a script.")
+        c.font = Font(name=FN, sz=10, italic=True, color=CDG); c.alignment = Alignment(horizontal="center")
         row += 1
-        for c, txt, bg in [(1, "REP #", CTe), (2, "TYPE", CTe), (3, "PLAY", CTe), (4, "FORMATION", CTe), (5, "NOTES", CTe)]:
-            hdr(ws16, row, c, txt, bg=bg, sz=9)
+    else:
+        row = _write_script_rows(ws16, row, script)
+    row += 2
+
+    # ── 3rd / 4th Down (bucketed by distance) ──
+    banner(ws16, row, "3RD / 4TH DOWN PRACTICE SCRIPT", NC16, bg=CB, sz=13, ht=26)
+    row += 1
+    ws16.merge_cells(start_row=row, start_column=1, end_row=row, end_column=NC16)
+    _sub2 = ws16.cell(row=row, column=1,
+                       value="Weighted by down & distance situation \u2014 run/pass split matched per bucket")
+    _sub2.font = Font(name=FN, size=9, italic=True, color=CDG)
+    _sub2.alignment = Alignment(horizontal="center", vertical="center")
+    ws16.row_dimensions[row].height = 16
+    row += 1
+    for c, txt, bg in [(1, "REP #", CTe), (2, "TYPE", CTe), (3, "DOWN", CTe), (4, "DIST", CTe),
+                       (5, "PLAY", CTe), (6, "FORMATION", CTe), (7, "HASH", CTe), (8, "PLAY #", CTe), (9, "NOTES", CTe)]:
+        hdr(ws16, row, c, txt, bg=bg, sz=9)
+    row += 1
+
+    buckets = [
+        ("3RD & 1-2", lambda p: p['dn'] == 3 and 1 <= p['dist'] <= 2, 3),
+        ("3RD & 3-6", lambda p: p['dn'] == 3 and 3 <= p['dist'] <= 6, 5),
+        ("3RD & 7-11", lambda p: p['dn'] == 3 and 7 <= p['dist'] <= 11, 5),
+        ("3RD & 12+", lambda p: p['dn'] == 3 and p['dist'] >= 12, 3),
+        ("4TH DOWN", lambda p: p['dn'] == 4, 4),
+    ]
+    rep_counter = 0
+    for label, fn, n_reps in buckets:
+        bucket_plays = [p for p in plays if fn(p)]
+        ws16.merge_cells(start_row=row, start_column=1, end_row=row, end_column=NC16)
+        _lbl = ws16.cell(row=row, column=1, value=f"  {label}  ({len(bucket_plays)} snaps tagged, {n_reps} reps)")
+        _lbl.font = Font(name=FN, bold=True, size=9, color=CW)
+        _lbl.fill = fil("FF4A235A")
+        _lbl.alignment = Alignment(horizontal="left", vertical="center")
+        ws16.row_dimensions[row].height = 18
         row += 1
-        script = _build_script(down_plays, 15)
-        if not script:
+        bucket_script = _build_script(bucket_plays, n_reps)
+        if not bucket_script:
             ws16.merge_cells(start_row=row, start_column=1, end_row=row, end_column=NC16)
-            c = ws16.cell(row=row, column=1, value="Not enough tagged data for this down to build a script.")
-            c.font = Font(name=FN, sz=10, italic=True, color=CDG); c.alignment = Alignment(horizontal="center")
-            row += 2
+            c = ws16.cell(row=row, column=1, value="Not enough tagged data for this situation.")
+            c.font = Font(name=FN, sz=9, italic=True, color=CDG); c.alignment = Alignment(horizontal="center")
+            row += 1
             continue
-        for i, (play_type, concept, form) in enumerate(script, 1):
+        for p in bucket_script:
+            rep_counter += 1
+            i = rep_counter
             bg = CL if i % 2 == 0 else CW
+            play_type = p['rp']
             type_color = "FF8B0000" if play_type == "Run" else "FF00008B"
             type_bg = CRB if play_type == "Run" else CPB
             sc(ws16, row, 1, i, bold=True, sz=9, fc="FF000000", bg=bg, fmt="0")
             sc(ws16, row, 2, play_type, bold=True, sz=9, fc=type_color, bg=type_bg)
-            sc(ws16, row, 3, concept, bold=True, sz=9, fc="FF000000", bg=bg, h="left")
-            sc(ws16, row, 4, form, sz=9, bg=bg, h="left")
-            sc(ws16, row, 5, "", sz=9, bg=CYB, h="left")
+            sc(ws16, row, 3, _DN_ORD.get(p['dn'], str(p['dn'])), sz=9, bg=bg)
+            sc(ws16, row, 4, p['dist'], sz=9, bg=bg, fmt="0")
+            sc(ws16, row, 5, p['concept'], bold=True, sz=9, fc="FF000000", bg=bg, h="left")
+            sc(ws16, row, 6, p['form'], sz=9, bg=bg, h="left")
+            sc(ws16, row, 7, p['hash'] or "\u2014", sz=9, bg=bg)
+            sc(ws16, row, 8, _play_num(p.get('play_num', '')), sz=9, bg=bg)
+            sc(ws16, row, 9, "", sz=9, bg=CYB)
             row += 1
-        row += 2
 
     print_friendly(ws16, repeat_rows=None, one_page=False)
 
