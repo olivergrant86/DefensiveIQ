@@ -3297,6 +3297,105 @@ def build_excel(plays, opp, week, date):
     ws15.freeze_panes = "A2"
     print_friendly(ws15, repeat_rows=None, one_page=True)
 
+    # ── Tab 18: Practice Scripts ────────────────────────────────
+    ws16 = wb2.create_sheet("18. Practice Scripts")
+    ws16.sheet_properties.tabColor = "0D0D0D"; ws16.sheet_view.showGridLines = False
+    NC16 = 5
+    widths(ws16, [10, 10, 24, 26, 32])
+
+    def _script_allocate(group_plays, n_slots):
+        cc = Counter(str(p['concept']) for p in group_plays if str(p['concept']).strip() not in ('', 'nan', 'None'))
+        if not cc or n_slots <= 0:
+            return []
+        total_calls = sum(cc.values())
+        ranked = cc.most_common()
+        raw = [(concept, n_slots * cnt / total_calls) for concept, cnt in ranked]
+        alloc = {concept: int(x) for concept, x in raw}
+        remainder = n_slots - sum(alloc.values())
+        fracs = sorted(raw, key=lambda t: -(t[1] - int(t[1])))
+        i = 0
+        while remainder > 0 and fracs:
+            alloc[fracs[i % len(fracs)][0]] += 1
+            remainder -= 1
+            i += 1
+        result = []
+        for concept, _cnt in ranked:
+            cnt = alloc.get(concept, 0)
+            if cnt <= 0: continue
+            fg = [p for p in group_plays if str(p['concept']) == concept]
+            fc2 = Counter(str(p['form']) for p in fg if str(p['form']).strip() not in ('', 'nan', 'None'))
+            form = fc2.most_common(1)[0][0] if fc2 else "\u2014"
+            for _ in range(cnt):
+                result.append((concept, form))
+        return result
+
+    def _build_script(down_plays, total_reps=15):
+        if not down_plays:
+            return []
+        runs = [p for p in down_plays if p['rp'] == 'Run']
+        passes = [p for p in down_plays if p['rp'] == 'Pass']
+        run_pct = len(runs) / len(down_plays)
+        n_runs = max(0, min(total_reps, round(total_reps * run_pct)))
+        n_passes = total_reps - n_runs
+        run_script = _script_allocate(runs, n_runs)
+        pass_script = _script_allocate(passes, n_passes)
+        script = []
+        i_r = i_p = 0
+        nr, npass = len(run_script), len(pass_script)
+        for _ in range(nr + npass):
+            r_ratio = i_r / nr if nr else 1
+            p_ratio = i_p / npass if npass else 1
+            if nr and (not npass or r_ratio <= p_ratio):
+                script.append(('Run',) + run_script[i_r]); i_r += 1
+            else:
+                script.append(('Pass',) + pass_script[i_p]); i_p += 1
+        return script
+
+    down_groups = [
+        ("1ST DOWN PRACTICE SCRIPT", [p for p in plays if p['dn'] == 1]),
+        ("2ND DOWN PRACTICE SCRIPT", [p for p in plays if p['dn'] == 2]),
+        ("3RD / 4TH DOWN PRACTICE SCRIPT", [p for p in plays if p['dn'] in (3, 4)]),
+    ]
+
+    row = 1
+    for title, down_plays in down_groups:
+        n_total = len(down_plays)
+        run_n = len([p for p in down_plays if p['rp'] == 'Run'])
+        run_pct_disp = round(run_n / n_total * 100) if n_total else 0
+        pass_pct_disp = 100 - run_pct_disp if n_total else 0
+        banner(ws16, row, title, NC16, bg=CB, sz=13, ht=26)
+        row += 1
+        ws16.merge_cells(start_row=row, start_column=1, end_row=row, end_column=NC16)
+        _sub = ws16.cell(row=row, column=1,
+                          value=f"Based on their actual {run_pct_disp}% Run / {pass_pct_disp}% Pass split \u2014 {n_total} snaps tagged")
+        _sub.font = Font(name=FN, size=9, italic=True, color=CDG)
+        _sub.alignment = Alignment(horizontal="center", vertical="center")
+        ws16.row_dimensions[row].height = 16
+        row += 1
+        for c, txt, bg in [(1, "REP #", CTe), (2, "TYPE", CTe), (3, "PLAY", CTe), (4, "FORMATION", CTe), (5, "NOTES", CTe)]:
+            hdr(ws16, row, c, txt, bg=bg, sz=9)
+        row += 1
+        script = _build_script(down_plays, 15)
+        if not script:
+            ws16.merge_cells(start_row=row, start_column=1, end_row=row, end_column=NC16)
+            c = ws16.cell(row=row, column=1, value="Not enough tagged data for this down to build a script.")
+            c.font = Font(name=FN, sz=10, italic=True, color=CDG); c.alignment = Alignment(horizontal="center")
+            row += 2
+            continue
+        for i, (play_type, concept, form) in enumerate(script, 1):
+            bg = CL if i % 2 == 0 else CW
+            type_color = "FF8B0000" if play_type == "Run" else "FF00008B"
+            type_bg = CRB if play_type == "Run" else CPB
+            sc(ws16, row, 1, i, bold=True, sz=9, fc="FF000000", bg=bg, fmt="0")
+            sc(ws16, row, 2, play_type, bold=True, sz=9, fc=type_color, bg=type_bg)
+            sc(ws16, row, 3, concept, bold=True, sz=9, fc="FF000000", bg=bg, h="left")
+            sc(ws16, row, 4, form, sz=9, bg=bg, h="left")
+            sc(ws16, row, 5, "", sz=9, bg=CYB, h="left")
+            row += 1
+        row += 2
+
+    print_friendly(ws16, repeat_rows=None, one_page=False)
+
     # ── Cover Tab (inserted first) ─────────────────────────────
     ws_cov = wb2.create_sheet("0. Cover", 0)
     ws_cov.sheet_properties.tabColor = "D2011A"
