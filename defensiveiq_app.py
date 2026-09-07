@@ -13,6 +13,7 @@ from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 from PIL import Image as PILImage
+from PIL import ImageDraw
 
 # ════════════════════════════════════════════════════════════════
 #  DEFENSIVEIQ  —  Opponent Offensive Tendency Scouting Report
@@ -1584,6 +1585,7 @@ COLUMN_ALIASES = {
     "RECEIVER":    ["OPP RECEIVER", "RECEIVER", "TARGET", "WR"],
     "BACK DEPTH":  ["BACK DEPTH", "BACKDEPTH", "DEPTH"],
     "OPEN/CLOSE":  ["OPEN/CLOSE", "OPEN/CLOSED", "OPEN CLOSE", "OPENCLOSE"],
+    "FIELD/BOUNDARY": ["FIELD/BOUNDARY", "FIELD/BOUND", "FIELD BOUNDARY", "F/B"],
     "PLAY #":      ["PLAY #", "PLAY NUM", "PLAY NUMBER", "PLAYNUM", "PLAY NO"],
 }
 
@@ -1754,6 +1756,7 @@ def load_plays(df):
             'receiver': row.get('RECEIVER', ''),
             'back_depth': str(row.get('BACK DEPTH', '')).strip(),
             'open_close': str(row.get('OPEN/CLOSE', '')).strip(),
+            'field_boundary': str(row.get('FIELD/BOUNDARY', '')).strip().upper()[:1],
             'play_num': row.get('PLAY #', ''),
         })
     return plays
@@ -1935,6 +1938,28 @@ def _play_num(v):
         return str(int(float(s)))
     except (TypeError, ValueError):
         return s
+
+def _ol_diagram_stream():
+    """A small, fixed placeholder diagram (O-O-X-O-O with a vertical line
+    through the center) for coaches to hand-fill the actual formation onto.
+    Same for every formation block — not data-driven."""
+    W, H = 260, 90
+    img = PILImage.new("RGBA", (W, H), (255, 255, 255, 0))
+    draw = ImageDraw.Draw(img)
+    cy = H // 2
+    xs = [40, 90, 130, 170, 220]
+    r = 12
+    draw.line([(130, 5), (130, H - 5)], fill=(20, 20, 20, 255), width=2)
+    for i, x in enumerate(xs):
+        if i == 2:
+            draw.line([(x - r, cy - r), (x + r, cy + r)], fill=(20, 20, 20, 255), width=3)
+            draw.line([(x - r, cy + r), (x + r, cy - r)], fill=(20, 20, 20, 255), width=3)
+        else:
+            draw.ellipse([x - r, cy - r, x + r, cy + r], outline=(20, 20, 20, 255), width=3)
+    out = io.BytesIO()
+    img.save(out, format="PNG")
+    out.seek(0)
+    return out
 
 def compute_player_stats(plays):
     """Build Passing / Rushing / Receiving stat lines per player from
@@ -3521,6 +3546,106 @@ def build_excel(plays, opp, week, date):
             row += 1
 
     print_friendly(ws16, repeat_rows=None, one_page=False)
+
+    # ── Tab 19: Formation Breakdown Sheets ──────────────────────
+    ws17 = wb2.create_sheet("19. Formation Breakdowns")
+    ws17.sheet_properties.tabColor = "0D0D0D"; ws17.sheet_view.showGridLines = False
+    widths(ws17, [32, 32])
+    GREEN_TXT = "FF1E8449"; RED_TXT = "FFD2011A"
+
+    def _fb_quadrant_lines(subset, rp_filter, side):
+        """Group by (concept, fib-status) so a play split between FIB'd and
+        non-FIB'd snaps shows as two separately-colored lines, not one."""
+        filtered = [p for p in subset if p['rp'] == rp_filter and p['field_boundary'] == side]
+        groups = Counter()
+        for p in filtered:
+            concept = str(p['concept']).strip()
+            if concept in ('', 'nan', 'None'): continue
+            groups[(concept, p['fib'].upper() == 'FIB')] += 1
+        lines = []
+        for (concept, is_fib), cnt in sorted(groups.items(), key=lambda kv: -kv[1]):
+            label = f"{concept} ({cnt})" if cnt > 1 else concept
+            lines.append((label, RED_TXT if is_fib else GREEN_TXT))
+        return lines
+
+    fam_groups = {}
+    for p in plays:
+        fam = str(p.get('form_family', '')).strip()
+        if fam in ('', 'nan', 'None'): continue
+        fam_groups.setdefault(fam, []).append(p)
+    fam_ranked = sorted(fam_groups.items(), key=lambda kv: -len(kv[1]))
+
+    row = 1
+    any_written = False
+    for fam, fam_plays in fam_ranked:
+        form_groups = {}
+        for p in fam_plays:
+            f = str(p.get('form', '')).strip()
+            if f in ('', 'nan', 'None'): continue
+            form_groups.setdefault(f, []).append(p)
+        form_ranked = sorted(form_groups.items(), key=lambda kv: -len(kv[1]))
+        for form_name, subset in form_ranked:
+            any_written = True
+            banner(ws17, row, form_name, 2, bg=CB, sz=14, ht=24)
+            row += 1
+            ws17.merge_cells(start_row=row, start_column=1, end_row=row, end_column=2)
+            _fbsub = ws17.cell(row=row, column=1, value=f"{fam} Formation Family \u2014 {len(subset)} snaps")
+            _fbsub.font = Font(name=FN, size=9, italic=True, color=CDG)
+            _fbsub.alignment = Alignment(horizontal="center", vertical="center")
+            ws17.row_dimensions[row].height = 15
+            row += 1
+            hdr(ws17, row, 1, "FIELD SIDE \u2014 RUN", bg="FF8B0000", sz=9)
+            hdr(ws17, row, 2, "BOUNDARY SIDE \u2014 RUN", bg="FF8B0000", sz=9)
+            row += 1
+            run_field = _fb_quadrant_lines(subset, 'Run', 'F')
+            run_bound = _fb_quadrant_lines(subset, 'Run', 'B')
+            n_run = max(len(run_field), len(run_bound), 1)
+            for i in range(n_run):
+                ws17.row_dimensions[row].height = 18
+                bg = CL if i % 2 == 0 else CW
+                if i < len(run_field):
+                    sc(ws17, row, 1, run_field[i][0], bold=True, sz=9, fc=run_field[i][1], bg=bg, h="left")
+                else:
+                    sc(ws17, row, 1, "\u2014" if i == 0 else "", sz=9, bg=bg, h="left")
+                if i < len(run_bound):
+                    sc(ws17, row, 2, run_bound[i][0], bold=True, sz=9, fc=run_bound[i][1], bg=bg, h="left")
+                else:
+                    sc(ws17, row, 2, "\u2014" if i == 0 else "", sz=9, bg=bg, h="left")
+                row += 1
+            ol_row = row
+            ws17.row_dimensions[ol_row].height = 60
+            ws17.merge_cells(start_row=ol_row, start_column=1, end_row=ol_row, end_column=2)
+            ol_img = XLImage(_ol_diagram_stream())
+            ol_img.width, ol_img.height = 220, 76
+            ws17.add_image(ol_img, f"A{ol_row}")
+            row += 1
+            hdr(ws17, row, 1, "FIELD SIDE \u2014 PASS", bg="FF00008B", sz=9)
+            hdr(ws17, row, 2, "BOUNDARY SIDE \u2014 PASS", bg="FF00008B", sz=9)
+            row += 1
+            pass_field = _fb_quadrant_lines(subset, 'Pass', 'F')
+            pass_bound = _fb_quadrant_lines(subset, 'Pass', 'B')
+            n_pass = max(len(pass_field), len(pass_bound), 1)
+            for i in range(n_pass):
+                ws17.row_dimensions[row].height = 18
+                bg = CL if i % 2 == 0 else CW
+                if i < len(pass_field):
+                    sc(ws17, row, 1, pass_field[i][0], bold=True, sz=9, fc=pass_field[i][1], bg=bg, h="left")
+                else:
+                    sc(ws17, row, 1, "\u2014" if i == 0 else "", sz=9, bg=bg, h="left")
+                if i < len(pass_bound):
+                    sc(ws17, row, 2, pass_bound[i][0], bold=True, sz=9, fc=pass_bound[i][1], bg=bg, h="left")
+                else:
+                    sc(ws17, row, 2, "\u2014" if i == 0 else "", sz=9, bg=bg, h="left")
+                row += 1
+            row += 2
+
+    if not any_written:
+        ws17.cell(row=1, column=1, value="Not enough tagged formation data to build formation breakdowns.").font = \
+            Font(name=FN, sz=11, italic=True, color=CDG)
+
+    ws17.cell(row=row + 1, column=1, value="Red = ran while FIB'd").font = Font(name=FN, italic=True, size=9, color=RED_TXT)
+    ws17.cell(row=row + 2, column=1, value="Green = not FIB'd").font = Font(name=FN, italic=True, size=9, color=GREEN_TXT)
+    print_friendly(ws17, repeat_rows=None, one_page=False)
 
     # ── Cover Tab (inserted first) ─────────────────────────────
     ws_cov = wb2.create_sheet("0. Cover", 0)
