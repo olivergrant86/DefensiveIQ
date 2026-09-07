@@ -3649,7 +3649,7 @@ def build_excel(plays, opp, week, date):
         fam_groups.setdefault(fam, []).append(p)
     fam_ranked = sorted(fam_groups.items(), key=lambda kv: -len(kv[1]))
 
-    all_formations = []
+    fam_sections = []
     for fam, fam_plays in fam_ranked:
         form_groups = {}
         for p in fam_plays:
@@ -3657,32 +3657,44 @@ def build_excel(plays, opp, week, date):
             if f in ('', 'nan', 'None'): continue
             form_groups.setdefault(f, []).append(p)
         form_ranked = sorted(form_groups.items(), key=lambda kv: -len(kv[1]))
-        for form_name, subset in form_ranked:
-            all_formations.append((fam, form_name, subset))
+        if form_ranked:
+            fam_sections.append((fam, form_ranked))
 
     row = 1
-    any_written = bool(all_formations)
-    row_band_count = 0
-    total_chunks = (len(all_formations) + 2) // 3
-    for chunk_idx, i in enumerate(range(0, len(all_formations), 3)):
-        chunk = all_formations[i:i + 3]
-        chunk_lines = []
-        for fam, form_name, subset in chunk:
-            rf = _fb_quadrant_lines(subset, 'Run', 'F')
-            rb = _fb_quadrant_lines(subset, 'Run', 'B')
-            pf = _fb_quadrant_lines(subset, 'Pass', 'F')
-            pb = _fb_quadrant_lines(subset, 'Pass', 'B')
-            chunk_lines.append((rf, rb, pf, pb))
-        n_run = max(max(len(rf), len(rb), 1) for rf, rb, pf, pb in chunk_lines)
-        n_pass = max(max(len(pf), len(pb), 1) for rf, rb, pf, pb in chunk_lines)
-        end_rows = []
-        for lane_idx, (fam, form_name, subset) in enumerate(chunk):
-            rf, rb, pf, pb = chunk_lines[lane_idx]
-            end_rows.append(_draw_formation_block(LANE_STARTS[lane_idx], row, fam, form_name, subset,
-                                                   rf, rb, pf, pb, n_run, n_pass))
-        row = max(end_rows) + 2
-        row_band_count += 1
-        if row_band_count % 2 == 0 and chunk_idx + 1 < total_chunks:
+    any_written = bool(fam_sections)
+    for fam_idx, (fam, form_ranked) in enumerate(fam_sections):
+        ws17.merge_cells(start_row=row, start_column=1, end_row=row, end_column=8)
+        _fam_title = ws17.cell(row=row, column=1, value=f"{fam} FORMATIONS")
+        _fam_title.font = Font(name=FN, bold=True, size=22, color=CW)
+        _fam_title.fill = fil("FFD2011A")
+        _fam_title.alignment = Alignment(horizontal="center", vertical="center")
+        ws17.row_dimensions[row].height = 40
+        row += 2
+
+        row_band_count = 0
+        total_chunks = (len(form_ranked) + 2) // 3
+        for chunk_idx, i in enumerate(range(0, len(form_ranked), 3)):
+            chunk = form_ranked[i:i + 3]
+            chunk_lines = []
+            for form_name, subset in chunk:
+                rf = _fb_quadrant_lines(subset, 'Run', 'F')
+                rb = _fb_quadrant_lines(subset, 'Run', 'B')
+                pf = _fb_quadrant_lines(subset, 'Pass', 'F')
+                pb = _fb_quadrant_lines(subset, 'Pass', 'B')
+                chunk_lines.append((rf, rb, pf, pb))
+            n_run = max(max(len(rf), len(rb), 1) for rf, rb, pf, pb in chunk_lines)
+            n_pass = max(max(len(pf), len(pb), 1) for rf, rb, pf, pb in chunk_lines)
+            end_rows = []
+            for lane_idx, (form_name, subset) in enumerate(chunk):
+                rf, rb, pf, pb = chunk_lines[lane_idx]
+                end_rows.append(_draw_formation_block(LANE_STARTS[lane_idx], row, fam, form_name, subset,
+                                                       rf, rb, pf, pb, n_run, n_pass))
+            row = max(end_rows) + 2
+            row_band_count += 1
+            if row_band_count % 2 == 0 and chunk_idx + 1 < total_chunks:
+                ws17.row_breaks.append(Break(id=row - 1))
+
+        if fam_idx + 1 < len(fam_sections):
             ws17.row_breaks.append(Break(id=row - 1))
 
     if not any_written:
