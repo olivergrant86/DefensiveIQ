@@ -11,6 +11,7 @@ from openpyxl.drawing.image import Image as XLImage
 from openpyxl.drawing.spreadsheet_drawing import OneCellAnchor, AnchorMarker
 from openpyxl.drawing.xdr import XDRPositiveSize2D
 from openpyxl.utils.units import pixels_to_EMU
+from openpyxl.worksheet.pagebreak import Break
 from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
@@ -3662,7 +3663,9 @@ def build_excel(plays, opp, week, date):
 
     row = 1
     any_written = bool(all_formations)
-    for i in range(0, len(all_formations), 3):
+    row_band_count = 0
+    total_chunks = (len(all_formations) + 2) // 3
+    for chunk_idx, i in enumerate(range(0, len(all_formations), 3)):
         chunk = all_formations[i:i + 3]
         chunk_lines = []
         for fam, form_name, subset in chunk:
@@ -3679,6 +3682,9 @@ def build_excel(plays, opp, week, date):
             end_rows.append(_draw_formation_block(LANE_STARTS[lane_idx], row, fam, form_name, subset,
                                                    rf, rb, pf, pb, n_run, n_pass))
         row = max(end_rows) + 2
+        row_band_count += 1
+        if row_band_count % 2 == 0 and chunk_idx + 1 < total_chunks:
+            ws17.row_breaks.append(Break(id=row - 1))
 
     if not any_written:
         ws17.cell(row=1, column=1, value="Not enough tagged formation data to build formation breakdowns.").font = \
