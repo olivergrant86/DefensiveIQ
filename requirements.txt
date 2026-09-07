@@ -4,3 +4,5 @@ openpyxl
 xlrd
 python-pptx
 requests
+google-auth
+google-api-python-client
