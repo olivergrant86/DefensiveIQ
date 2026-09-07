@@ -3111,8 +3111,45 @@ def build_excel(plays, opp, week, date):
             ws.merge_cells(f"A3:{gcl(NC)}3")
             c = ws.cell(row=3, column=1, value="Not enough tagged data for this section.")
             c.font = Font(name=FN, sz=10, italic=True, color=CDG); c.alignment = Alignment(horizontal="center")
+            last_row = 3
+        else:
+            last_row = 2 + len(ranked)
         ws.freeze_panes = "B3"
         print_friendly(ws, "1:2")
+        return last_row
+
+    def backfield_breakdown(ws, start_row):
+        """A second table on the same tab — run/pass tendency and top 3
+        run/pass plays for each backfield alignment."""
+        NCb = 10
+        banner(ws, start_row, "BACKFIELD TENDENCIES  \u2014  Run/Pass Split & Favorite Plays", NCb,
+               bg="FF1A5276", sz=13, ht=28)
+        hdr_row = start_row + 1
+        for c, txt, bg in [(1, "GROUP", CB), (2, "Snaps", CB), (3, "Run%", CB), (4, "Pass%", CB),
+                           (5, "#1 Run Play", CR), (6, "#2 Run Play", CR), (7, "#3 Run Play", CR),
+                           (8, "#1 Pass Play", CBl), (9, "#2 Pass Play", CBl), (10, "#3 Pass Play", CBl)]:
+            hdr(ws, hdr_row, c, txt, bg=bg, sz=8, wrap=True)
+        groups = {}
+        for p in plays:
+            v = str(p.get('backfield', '')).strip()
+            if v in ('', 'nan', 'None'): v = "(Blank)"
+            groups.setdefault(v, []).append(p)
+        ranked = sorted(groups.items(), key=lambda kv: -len(kv[1]))
+        for ri, (v, g) in enumerate(ranked):
+            r = hdr_row + 1 + ri; ws.row_dimensions[r].height = 24
+            bg = CL if ri % 2 == 0 else CW
+            gr = [p for p in g if p['rp'] == 'Run']; gp = [p for p in g if p['rp'] == 'Pass']
+            sc(ws, r, 1, v, bold=True, sz=9, fc=CW, bg="FF1A5276", h="left")
+            sc(ws, r, 2, len(g), bold=True, sz=10, fc="FF000000", bg=bg, fmt="0")
+            sc(ws, r, 3, round(len(gr) / len(g), 2) if g else "", bold=True, sz=10, fc="FF8B0000", bg=CRB, fmt="0%")
+            sc(ws, r, 4, round(len(gp) / len(g), 2) if g else "", bold=True, sz=10, fc="FF00008B", bg=CPB, fmt="0%")
+            t3rc = top3_str(gr, 'concept', 3); t3pc = top3_str(gp, 'concept', 3)
+            for i, cn in enumerate([5, 6, 7]): sc(ws, r, cn, t3rc[i], sz=9, bg=CRB, wrap=True)
+            for i, cn in enumerate([8, 9, 10]): sc(ws, r, cn, t3pc[i], sz=9, bg=CPB, wrap=True)
+        if not ranked:
+            ws.merge_cells(f"A{hdr_row+1}:{gcl(NCb)}{hdr_row+1}")
+            c = ws.cell(row=hdr_row + 1, column=1, value="Not enough backfield data tagged.")
+            c.font = Font(name=FN, sz=10, italic=True, color=CDG); c.alignment = Alignment(horizontal="center")
 
     ws13 = wb2.create_sheet("13. Form Family Tendencies")
     group_tab(ws13, 'form_family', "FORM FAMILY TENDENCIES  \u2014  Run/Pass Split, Favorite Plays & Formations",
@@ -3123,8 +3160,9 @@ def build_excel(plays, opp, week, date):
               "FF784212", "784212", empty_label="Not FIB")
 
     ws14b = wb2.create_sheet("15. Back Depth")
-    group_tab(ws14b, 'back_depth', "BACK DEPTH TENDENCIES  \u2014  Run/Pass Split, Favorite Plays & Formations",
+    _bd_last_row = group_tab(ws14b, 'back_depth', "BACK DEPTH TENDENCIES  \u2014  Run/Pass Split, Favorite Plays & Formations",
               "FF0E7060", "0E7060", empty_label="(Blank)")
+    backfield_breakdown(ws14b, _bd_last_row + 2)
 
     # ── Tab 16: Open/Closed (with cross-break by Form Family) ─
     ws14c = wb2.create_sheet("16. Open-Closed")
