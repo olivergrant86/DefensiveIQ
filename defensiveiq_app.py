@@ -1950,16 +1950,15 @@ def _is_fib(v):
     return s in ('FIB', 'YES', 'Y', 'TRUE', '1')
 
 def _ol_diagram_stream():
-    """A small, fixed placeholder diagram (O-O-X-O-O with a vertical line
-    through the center) for coaches to hand-fill the actual formation onto.
-    Same for every formation block — not data-driven."""
+    """A small, fixed placeholder diagram (O-O-X-O-O) for coaches to
+    hand-fill the actual formation onto. Same for every formation block —
+    not data-driven."""
     W, H = 260, 90
     img = PILImage.new("RGBA", (W, H), (255, 255, 255, 0))
     draw = ImageDraw.Draw(img)
     cy = H // 2
     xs = [40, 90, 130, 170, 220]
     r = 12
-    draw.line([(130, 5), (130, H - 5)], fill=(20, 20, 20, 255), width=2)
     for i, x in enumerate(xs):
         if i == 2:
             draw.line([(x - r, cy - r), (x + r, cy + r)], fill=(20, 20, 20, 255), width=3)
