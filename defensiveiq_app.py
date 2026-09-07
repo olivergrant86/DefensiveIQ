@@ -8,6 +8,9 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter as gcl
 from openpyxl.drawing.image import Image as XLImage
+from openpyxl.drawing.spreadsheet_drawing import OneCellAnchor, AnchorMarker
+from openpyxl.drawing.xdr import XDRPositiveSize2D
+from openpyxl.utils.units import pixels_to_EMU
 from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
@@ -1939,6 +1942,12 @@ def _play_num(v):
     except (TypeError, ValueError):
         return s
 
+def _is_fib(v):
+    """Different Hudl exports tag FIB differently ('FIB', 'YES', 'Y', 'TRUE',
+    '1') — treat any of those as FIB'd, everything else (blank, 'NO', 'N') as not."""
+    s = str(v).strip().upper()
+    return s in ('FIB', 'YES', 'Y', 'TRUE', '1')
+
 def _ol_diagram_stream():
     """A small, fixed placeholder diagram (O-O-X-O-O with a vertical line
     through the center) for coaches to hand-fill the actual formation onto.
@@ -3561,7 +3570,7 @@ def build_excel(plays, opp, week, date):
         for p in filtered:
             concept = str(p['concept']).strip()
             if concept in ('', 'nan', 'None'): continue
-            groups[(concept, p['fib'].upper() == 'FIB')] += 1
+            groups[(concept, _is_fib(p['fib']))] += 1
         lines = []
         for (concept, is_fib), cnt in sorted(groups.items(), key=lambda kv: -kv[1]):
             label = f"{concept} ({cnt})" if cnt > 1 else concept
@@ -3616,8 +3625,17 @@ def build_excel(plays, opp, week, date):
             ws17.row_dimensions[ol_row].height = 60
             ws17.merge_cells(start_row=ol_row, start_column=1, end_row=ol_row, end_column=2)
             ol_img = XLImage(_ol_diagram_stream())
-            ol_img.width, ol_img.height = 220, 76
-            ws17.add_image(ol_img, f"A{ol_row}")
+            img_w, img_h = 220, 76
+            ol_img.width, ol_img.height = img_w, img_h
+            col1_px = 32 * 7 + 5   # approx pixel width of a 32-char-wide column
+            col2_px = 32 * 7 + 5
+            total_px = col1_px + col2_px
+            x_offset = max(0, (total_px - img_w) // 2)
+            row_h_px = int(60 * 96 / 72)   # 60pt row height converted to pixels
+            y_offset = max(0, (row_h_px - img_h) // 2)
+            marker = AnchorMarker(col=0, colOff=pixels_to_EMU(x_offset), row=ol_row - 1, rowOff=pixels_to_EMU(y_offset))
+            ol_img.anchor = OneCellAnchor(_from=marker, ext=XDRPositiveSize2D(pixels_to_EMU(img_w), pixels_to_EMU(img_h)))
+            ws17.add_image(ol_img)
             row += 1
             hdr(ws17, row, 1, "FIELD SIDE \u2014 PASS", bg="FF00008B", sz=9)
             hdr(ws17, row, 2, "BOUNDARY SIDE \u2014 PASS", bg="FF00008B", sz=9)
