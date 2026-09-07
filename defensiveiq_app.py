@@ -13,9 +13,6 @@ from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 from PIL import Image as PILImage
-from google.oauth2 import service_account as gdrive_service_account
-from googleapiclient.discovery import build as gdrive_build
-from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
 
 # ════════════════════════════════════════════════════════════════
 #  DEFENSIVEIQ  —  Opponent Offensive Tendency Scouting Report
@@ -3646,97 +3643,6 @@ def build_html(plays, opp, week, date):
 </div>
 </div></body></html>'''
 
-# ── Google Drive shared storage (Saved Reports) ─────────────────
-DRIVE_FOLDER_MIME = "application/vnd.google-apps.folder"
-
-def _drive_enabled():
-    """True only if both secrets are configured — lets the app run fine
-    (with the shared-storage section simply hidden) if they're not."""
-    try:
-        return bool(st.secrets.get("gdrive_folder_id")) and bool(st.secrets.get("gdrive_service_account"))
-    except Exception:
-        return False
-
-@st.cache_resource(show_spinner=False)
-def _drive_service():
-    creds_info = dict(st.secrets["gdrive_service_account"])
-    creds = gdrive_service_account.Credentials.from_service_account_info(
-        creds_info, scopes=["https://www.googleapis.com/auth/drive"])
-    return gdrive_build("drive", "v3", credentials=creds, cache_discovery=False, static_discovery=True)
-
-def _drive_root_id():
-    return st.secrets["gdrive_folder_id"]
-
-def _drive_find_folder(name, parent_id):
-    """Find a subfolder by exact name inside parent_id. Returns its id or None."""
-    svc = _drive_service()
-    safe_name = name.replace("'", "\\'")
-    q = (f"name = '{safe_name}' and mimeType = '{DRIVE_FOLDER_MIME}' "
-         f"and '{parent_id}' in parents and trashed = false")
-    res = svc.files().list(q=q, fields="files(id, name)", pageSize=5).execute()
-    files = res.get("files", [])
-    return files[0]["id"] if files else None
-
-def _drive_delete_folder_if_exists(name, parent_id):
-    fid = _drive_find_folder(name, parent_id)
-    if fid:
-        _drive_service().files().delete(fileId=fid).execute()
-
-def _drive_create_folder(name, parent_id):
-    svc = _drive_service()
-    meta = {"name": name, "mimeType": DRIVE_FOLDER_MIME, "parents": [parent_id]}
-    folder = svc.files().create(body=meta, fields="id").execute()
-    return folder["id"]
-
-def _drive_upload_bytes(name, mime_type, data, parent_id):
-    svc = _drive_service()
-    media = MediaIoBaseUpload(io.BytesIO(data), mimetype=mime_type, resumable=False)
-    meta = {"name": name, "parents": [parent_id]}
-    svc.files().create(body=meta, media_body=media, fields="id").execute()
-
-def save_report_to_drive(folder_name, excel_bytes, html_bytes, pptx_bytes):
-    """Delete any existing report folder with this exact name, then upload
-    the fresh set — so re-running an opponent always leaves only the newest."""
-    root = _drive_root_id()
-    _drive_delete_folder_if_exists(folder_name, root)
-    new_id = _drive_create_folder(folder_name, root)
-    _drive_upload_bytes(f"{folder_name}.xlsx",
-                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                         excel_bytes, new_id)
-    _drive_upload_bytes(f"{folder_name}_Report.html", "text/html", html_bytes, new_id)
-    _drive_upload_bytes(f"{folder_name}_Scouting.pptx",
-                         "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                         pptx_bytes, new_id)
-
-def list_saved_reports():
-    """Every report folder in the shared Drive folder, newest first."""
-    svc = _drive_service()
-    root = _drive_root_id()
-    q = f"mimeType = '{DRIVE_FOLDER_MIME}' and '{root}' in parents and trashed = false"
-    res = svc.files().list(q=q, fields="files(id, name, createdTime)",
-                            orderBy="createdTime desc", pageSize=100).execute()
-    return res.get("files", [])
-
-def list_files_in_report(folder_id):
-    svc = _drive_service()
-    q = f"'{folder_id}' in parents and trashed = false"
-    res = svc.files().list(q=q, fields="files(id, name, mimeType)", pageSize=10).execute()
-    return res.get("files", [])
-
-def download_drive_file(file_id):
-    svc = _drive_service()
-    request = svc.files().get_media(fileId=file_id)
-    buf = io.BytesIO()
-    downloader = MediaIoBaseDownload(buf, request)
-    done = False
-    while not done:
-        _, done = downloader.next_chunk()
-    buf.seek(0)
-    return buf.getvalue()
-
-def delete_saved_report(folder_id):
-    _drive_service().files().delete(fileId=folder_id).execute()
-
 # ── STREAMLIT UI ──────────────────────────────────────────────
 st.markdown(f'<div style="display:flex;align-items:center;gap:18px;margin-bottom:4px"><img src="{LOGO_DATA_URI}" style="height:72px;width:auto"/><div class="main-title" style="margin-bottom:0">Defensive<span style="color:#D2011A">IQ</span></div></div>', unsafe_allow_html=True)
 st.markdown('<div style="font-size:16px;color:rgba(240,237,232,.55);margin-bottom:24px;font-weight:300">Scout your next opponent\'s offense. Upload their playlist and uncover every tendency — formations, concepts, runs, passes, hashes, and situations — to build your defensive game plan.</div>', unsafe_allow_html=True)
@@ -3752,42 +3658,6 @@ st.markdown('''
   </ol>
 </div>
 ''', unsafe_allow_html=True)
-
-if _drive_enabled():
-    with st.expander("📁 Saved Reports — shared with your whole staff"):
-        try:
-            reports = list_saved_reports()
-        except Exception as e:
-            reports = None
-            st.error("Couldn't reach the shared folder right now. Try again in a moment.")
-        if reports is not None:
-            if not reports:
-                st.caption("No reports saved yet — run an analysis below and it'll show up here for everyone.")
-            for rep in reports:
-                rcol1, rcol2, rcol3 = st.columns([4, 1, 1])
-                rcol1.markdown(f"**{rep['name']}**")
-                confirm_key = f"confirm_del_{rep['id']}"
-                if rcol2.button("View files", key=f"view_{rep['id']}"):
-                    st.session_state[f"show_{rep['id']}"] = True
-                if rcol3.button("🗑️ Delete", key=f"del_{rep['id']}"):
-                    st.session_state[confirm_key] = True
-                if st.session_state.get(confirm_key):
-                    st.warning(f"Delete **{rep['name']}** for everyone? This can't be undone.")
-                    yc1, yc2 = st.columns(2)
-                    if yc1.button("Yes, delete it", key=f"yes_{rep['id']}"):
-                        delete_saved_report(rep['id'])
-                        st.session_state.pop(confirm_key, None)
-                        st.rerun()
-                    if yc2.button("Cancel", key=f"no_{rep['id']}"):
-                        st.session_state.pop(confirm_key, None)
-                        st.rerun()
-                if st.session_state.get(f"show_{rep['id']}"):
-                    files = list_files_in_report(rep['id'])
-                    fcols = st.columns(len(files)) if files else []
-                    for fcol, f in zip(fcols, files):
-                        fbytes = download_drive_file(f['id'])
-                        fcol.download_button(f['name'], data=fbytes, file_name=f['name'], key=f"dl_{f['id']}")
-    st.divider()
 
 st.divider()
 col1, col2, col3 = st.columns(3)
@@ -3864,14 +3734,6 @@ if uploaded and st.button("🛡️ RUN ANALYSIS"):
                 st.markdown("### Download Your Reports")
                 d1, d2, d3 = st.columns(3)
                 fname = (opp_name + "_" if opp_name else "") + (f"Week{week}_" if week else "") + "DefensiveIQ"
-                if _drive_enabled():
-                    try:
-                        with st.spinner("Saving to the shared folder for your staff..."):
-                            save_report_to_drive(fname, excel_bytes, html_bytes, pptx_bytes)
-                        st.success("📁 Saved to the shared folder — your staff can grab it from \"Saved Reports\" above.")
-                    except Exception as e:
-                        st.warning("Generated fine, but couldn't save to the shared folder this time. "
-                                   "Your downloads below still work as normal.")
                 with d1:
                     st.download_button("📊 Excel Workbook", data=excel_bytes,
                         file_name=f"{fname}.xlsx",
