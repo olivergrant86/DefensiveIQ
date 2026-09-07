@@ -3613,14 +3613,14 @@ def build_excel(plays, opp, week, date):
                 sc(ws17, r, col_start + 1, "\u2014" if i == 0 else "", sz=8, bg=bg, h="left")
             r += 1
         ol_row = r
-        ws17.row_dimensions[ol_row].height = 50
+        ws17.row_dimensions[ol_row].height = 76
         ws17.merge_cells(start_row=ol_row, start_column=col_start, end_row=ol_row, end_column=col_start + 1)
         ol_img = XLImage(_ol_diagram_stream())
         img_w, img_h = 150, 52
         ol_img.width, ol_img.height = img_w, img_h
         lane_px = (22 * 7 + 5) * 2
         x_offset = max(0, (lane_px - img_w) // 2)
-        row_h_px = int(50 * 96 / 72)
+        row_h_px = int(76 * 96 / 72)
         y_offset = max(0, (row_h_px - img_h) // 2)
         marker = AnchorMarker(col=col_start - 1, colOff=pixels_to_EMU(x_offset), row=ol_row - 1, rowOff=pixels_to_EMU(y_offset))
         ol_img.anchor = OneCellAnchor(_from=marker, ext=XDRPositiveSize2D(pixels_to_EMU(img_w), pixels_to_EMU(img_h)))
