@@ -3556,11 +3556,12 @@ def build_excel(plays, opp, week, date):
 
     print_friendly(ws16, repeat_rows=None, one_page=False)
 
-    # ── Tab 19: Formation Breakdown Sheets ──────────────────────
+    # ── Tab 19: Formation Breakdown Sheets (3-column grid) ──────
     ws17 = wb2.create_sheet("19. Formation Breakdowns")
     ws17.sheet_properties.tabColor = "0D0D0D"; ws17.sheet_view.showGridLines = False
-    widths(ws17, [32, 32])
+    widths(ws17, [22, 22, 3, 22, 22, 3, 22, 22])
     GREEN_TXT = "FF1E8449"; RED_TXT = "FFD2011A"
+    LANE_STARTS = [1, 4, 7]
 
     def _fb_quadrant_lines(subset, rp_filter, side):
         """Group by (concept, fib-status) so a play split between FIB'd and
@@ -3577,6 +3578,70 @@ def build_excel(plays, opp, week, date):
             lines.append((label, RED_TXT if is_fib else GREEN_TXT))
         return lines
 
+    def _fb_banner(r, col_start, txt, bg=CB, sz=13, ht=22):
+        ws17.merge_cells(start_row=r, start_column=col_start, end_row=r, end_column=col_start + 1)
+        c = ws17.cell(row=r, column=col_start, value=txt)
+        c.font = Font(name=FN, bold=True, size=sz, color=CW)
+        c.fill = fil(bg)
+        c.alignment = Alignment(horizontal="center", vertical="center")
+        ws17.row_dimensions[r].height = ht
+
+    def _draw_formation_block(col_start, row_start, fam, form_name, subset, run_field, run_bound, pass_field, pass_bound, n_run, n_pass):
+        r = row_start
+        _fb_banner(r, col_start, form_name, bg=CB, sz=12, ht=20)
+        r += 1
+        ws17.merge_cells(start_row=r, start_column=col_start, end_row=r, end_column=col_start + 1)
+        _fbsub = ws17.cell(row=r, column=col_start, value=f"{fam} \u2014 {len(subset)} snaps")
+        _fbsub.font = Font(name=FN, size=8, italic=True, color=CDG)
+        _fbsub.alignment = Alignment(horizontal="center", vertical="center")
+        ws17.row_dimensions[r].height = 14
+        r += 1
+        hdr(ws17, r, col_start, "FIELD \u2014 RUN", bg="FF8B0000", sz=8, wrap=True)
+        hdr(ws17, r, col_start + 1, "BOUND \u2014 RUN", bg="FF8B0000", sz=8, wrap=True)
+        r += 1
+        for i in range(n_run):
+            ws17.row_dimensions[r].height = 16
+            bg = CL if i % 2 == 0 else CW
+            if i < len(run_field):
+                sc(ws17, r, col_start, run_field[i][0], bold=True, sz=8, fc=run_field[i][1], bg=bg, h="left", wrap=True)
+            else:
+                sc(ws17, r, col_start, "\u2014" if i == 0 else "", sz=8, bg=bg, h="left")
+            if i < len(run_bound):
+                sc(ws17, r, col_start + 1, run_bound[i][0], bold=True, sz=8, fc=run_bound[i][1], bg=bg, h="left", wrap=True)
+            else:
+                sc(ws17, r, col_start + 1, "\u2014" if i == 0 else "", sz=8, bg=bg, h="left")
+            r += 1
+        ol_row = r
+        ws17.row_dimensions[ol_row].height = 50
+        ws17.merge_cells(start_row=ol_row, start_column=col_start, end_row=ol_row, end_column=col_start + 1)
+        ol_img = XLImage(_ol_diagram_stream())
+        img_w, img_h = 150, 52
+        ol_img.width, ol_img.height = img_w, img_h
+        lane_px = (22 * 7 + 5) * 2
+        x_offset = max(0, (lane_px - img_w) // 2)
+        row_h_px = int(50 * 96 / 72)
+        y_offset = max(0, (row_h_px - img_h) // 2)
+        marker = AnchorMarker(col=col_start - 1, colOff=pixels_to_EMU(x_offset), row=ol_row - 1, rowOff=pixels_to_EMU(y_offset))
+        ol_img.anchor = OneCellAnchor(_from=marker, ext=XDRPositiveSize2D(pixels_to_EMU(img_w), pixels_to_EMU(img_h)))
+        ws17.add_image(ol_img)
+        r += 1
+        hdr(ws17, r, col_start, "FIELD \u2014 PASS", bg="FF00008B", sz=8, wrap=True)
+        hdr(ws17, r, col_start + 1, "BOUND \u2014 PASS", bg="FF00008B", sz=8, wrap=True)
+        r += 1
+        for i in range(n_pass):
+            ws17.row_dimensions[r].height = 16
+            bg = CL if i % 2 == 0 else CW
+            if i < len(pass_field):
+                sc(ws17, r, col_start, pass_field[i][0], bold=True, sz=8, fc=pass_field[i][1], bg=bg, h="left", wrap=True)
+            else:
+                sc(ws17, r, col_start, "\u2014" if i == 0 else "", sz=8, bg=bg, h="left")
+            if i < len(pass_bound):
+                sc(ws17, r, col_start + 1, pass_bound[i][0], bold=True, sz=8, fc=pass_bound[i][1], bg=bg, h="left", wrap=True)
+            else:
+                sc(ws17, r, col_start + 1, "\u2014" if i == 0 else "", sz=8, bg=bg, h="left")
+            r += 1
+        return r
+
     fam_groups = {}
     for p in plays:
         fam = str(p.get('form_family', '')).strip()
@@ -3584,8 +3649,7 @@ def build_excel(plays, opp, week, date):
         fam_groups.setdefault(fam, []).append(p)
     fam_ranked = sorted(fam_groups.items(), key=lambda kv: -len(kv[1]))
 
-    row = 1
-    any_written = False
+    all_formations = []
     for fam, fam_plays in fam_ranked:
         form_groups = {}
         for p in fam_plays:
@@ -3594,68 +3658,27 @@ def build_excel(plays, opp, week, date):
             form_groups.setdefault(f, []).append(p)
         form_ranked = sorted(form_groups.items(), key=lambda kv: -len(kv[1]))
         for form_name, subset in form_ranked:
-            any_written = True
-            banner(ws17, row, form_name, 2, bg=CB, sz=14, ht=24)
-            row += 1
-            ws17.merge_cells(start_row=row, start_column=1, end_row=row, end_column=2)
-            _fbsub = ws17.cell(row=row, column=1, value=f"{fam} Formation Family \u2014 {len(subset)} snaps")
-            _fbsub.font = Font(name=FN, size=9, italic=True, color=CDG)
-            _fbsub.alignment = Alignment(horizontal="center", vertical="center")
-            ws17.row_dimensions[row].height = 15
-            row += 1
-            hdr(ws17, row, 1, "FIELD SIDE \u2014 RUN", bg="FF8B0000", sz=9)
-            hdr(ws17, row, 2, "BOUNDARY SIDE \u2014 RUN", bg="FF8B0000", sz=9)
-            row += 1
-            run_field = _fb_quadrant_lines(subset, 'Run', 'F')
-            run_bound = _fb_quadrant_lines(subset, 'Run', 'B')
-            n_run = max(len(run_field), len(run_bound), 1)
-            for i in range(n_run):
-                ws17.row_dimensions[row].height = 18
-                bg = CL if i % 2 == 0 else CW
-                if i < len(run_field):
-                    sc(ws17, row, 1, run_field[i][0], bold=True, sz=9, fc=run_field[i][1], bg=bg, h="left")
-                else:
-                    sc(ws17, row, 1, "\u2014" if i == 0 else "", sz=9, bg=bg, h="left")
-                if i < len(run_bound):
-                    sc(ws17, row, 2, run_bound[i][0], bold=True, sz=9, fc=run_bound[i][1], bg=bg, h="left")
-                else:
-                    sc(ws17, row, 2, "\u2014" if i == 0 else "", sz=9, bg=bg, h="left")
-                row += 1
-            ol_row = row
-            ws17.row_dimensions[ol_row].height = 60
-            ws17.merge_cells(start_row=ol_row, start_column=1, end_row=ol_row, end_column=2)
-            ol_img = XLImage(_ol_diagram_stream())
-            img_w, img_h = 220, 76
-            ol_img.width, ol_img.height = img_w, img_h
-            col1_px = 32 * 7 + 5   # approx pixel width of a 32-char-wide column
-            col2_px = 32 * 7 + 5
-            total_px = col1_px + col2_px
-            x_offset = max(0, (total_px - img_w) // 2)
-            row_h_px = int(60 * 96 / 72)   # 60pt row height converted to pixels
-            y_offset = max(0, (row_h_px - img_h) // 2)
-            marker = AnchorMarker(col=0, colOff=pixels_to_EMU(x_offset), row=ol_row - 1, rowOff=pixels_to_EMU(y_offset))
-            ol_img.anchor = OneCellAnchor(_from=marker, ext=XDRPositiveSize2D(pixels_to_EMU(img_w), pixels_to_EMU(img_h)))
-            ws17.add_image(ol_img)
-            row += 1
-            hdr(ws17, row, 1, "FIELD SIDE \u2014 PASS", bg="FF00008B", sz=9)
-            hdr(ws17, row, 2, "BOUNDARY SIDE \u2014 PASS", bg="FF00008B", sz=9)
-            row += 1
-            pass_field = _fb_quadrant_lines(subset, 'Pass', 'F')
-            pass_bound = _fb_quadrant_lines(subset, 'Pass', 'B')
-            n_pass = max(len(pass_field), len(pass_bound), 1)
-            for i in range(n_pass):
-                ws17.row_dimensions[row].height = 18
-                bg = CL if i % 2 == 0 else CW
-                if i < len(pass_field):
-                    sc(ws17, row, 1, pass_field[i][0], bold=True, sz=9, fc=pass_field[i][1], bg=bg, h="left")
-                else:
-                    sc(ws17, row, 1, "\u2014" if i == 0 else "", sz=9, bg=bg, h="left")
-                if i < len(pass_bound):
-                    sc(ws17, row, 2, pass_bound[i][0], bold=True, sz=9, fc=pass_bound[i][1], bg=bg, h="left")
-                else:
-                    sc(ws17, row, 2, "\u2014" if i == 0 else "", sz=9, bg=bg, h="left")
-                row += 1
-            row += 2
+            all_formations.append((fam, form_name, subset))
+
+    row = 1
+    any_written = bool(all_formations)
+    for i in range(0, len(all_formations), 3):
+        chunk = all_formations[i:i + 3]
+        chunk_lines = []
+        for fam, form_name, subset in chunk:
+            rf = _fb_quadrant_lines(subset, 'Run', 'F')
+            rb = _fb_quadrant_lines(subset, 'Run', 'B')
+            pf = _fb_quadrant_lines(subset, 'Pass', 'F')
+            pb = _fb_quadrant_lines(subset, 'Pass', 'B')
+            chunk_lines.append((rf, rb, pf, pb))
+        n_run = max(max(len(rf), len(rb), 1) for rf, rb, pf, pb in chunk_lines)
+        n_pass = max(max(len(pf), len(pb), 1) for rf, rb, pf, pb in chunk_lines)
+        end_rows = []
+        for lane_idx, (fam, form_name, subset) in enumerate(chunk):
+            rf, rb, pf, pb = chunk_lines[lane_idx]
+            end_rows.append(_draw_formation_block(LANE_STARTS[lane_idx], row, fam, form_name, subset,
+                                                   rf, rb, pf, pb, n_run, n_pass))
+        row = max(end_rows) + 2
 
     if not any_written:
         ws17.cell(row=1, column=1, value="Not enough tagged formation data to build formation breakdowns.").font = \
