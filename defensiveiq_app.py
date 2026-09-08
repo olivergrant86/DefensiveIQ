@@ -13,6 +13,8 @@ from openpyxl.drawing.spreadsheet_drawing import OneCellAnchor, AnchorMarker
 from openpyxl.drawing.xdr import XDRPositiveSize2D
 from openpyxl.utils.units import pixels_to_EMU
 from openpyxl.worksheet.pagebreak import Break
+from openpyxl.cell.rich_text import CellRichText, TextBlock
+from openpyxl.cell.text import InlineFont
 from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
@@ -3618,10 +3620,16 @@ def build_excel(plays, opp, week, date):
             lines.append((label, RED_TXT if is_fib else GREEN_TXT))
         return lines
 
-    def _fb_banner(r, col_start, form_name, bg=CB, sz=15, ht=22):
+    def _fb_banner(r, col_start, form_name, run_pass_txt, fb_txt, bg=CB, sz=15, ht=22):
         ws17.merge_cells(start_row=r, start_column=col_start, end_row=r, end_column=col_start + 1)
-        c = ws17.cell(row=r, column=col_start, value=form_name)
-        c.font = Font(name=FN, bold=True, size=sz, color="FFD2011A")
+        small_font = InlineFont(rFont=FN, b=True, sz=8, color=CW)
+        name_font = InlineFont(rFont=FN, b=True, sz=sz, color="FFD2011A")
+        c = ws17.cell(row=r, column=col_start)
+        c.value = CellRichText(
+            TextBlock(small_font, f"{run_pass_txt}   "),
+            TextBlock(name_font, form_name),
+            TextBlock(small_font, f"   {fb_txt}"),
+        )
         c.fill = fil(bg)
         c.alignment = Alignment(horizontal="center", vertical="center")
         ws17.row_dimensions[r].height = ht
@@ -3632,7 +3640,17 @@ def build_excel(plays, opp, week, date):
         pass_total = len([p for p in subset if p['rp'] == 'Pass'])
         fib_run_total = len([p for p in subset if p['rp'] == 'Run' and _is_fib(p['fib'])])
         fib_pass_total = len([p for p in subset if p['rp'] == 'Pass' and _is_fib(p['fib'])])
-        _fb_banner(r, col_start, form_name, bg=CB, sz=15, ht=22)
+        rp_total = run_total + pass_total
+        run_pct = round(run_total / rp_total * 100) if rp_total else 0
+        pass_pct = 100 - run_pct if rp_total else 0
+        field_ct = len([p for p in subset if p['field_boundary'] == 'F'])
+        bound_ct = len([p for p in subset if p['field_boundary'] == 'B'])
+        fb_total = field_ct + bound_ct
+        field_pct = round(field_ct / fb_total * 100) if fb_total else 0
+        bound_pct = 100 - field_pct if fb_total else 0
+        run_pass_txt = f"{run_pct}%R/{pass_pct}%P"
+        fb_txt = f"{field_pct}%F/{bound_pct}%B"
+        _fb_banner(r, col_start, form_name, run_pass_txt, fb_txt, bg=CB, sz=14, ht=22)
         r += 1
         ws17.merge_cells(start_row=r, start_column=col_start, end_row=r, end_column=col_start + 1)
         _fbsub = ws17.cell(row=r, column=col_start,
