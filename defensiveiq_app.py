@@ -2500,14 +2500,24 @@ def build_excel(plays, opp, week, date):
     def widths(ws, lst):
         for i, w in enumerate(lst, 1): ws.column_dimensions[gcl(i)].width = w
 
-    def print_friendly(ws, repeat_rows="1:2", one_page=False):
+    def print_friendly(ws, repeat_rows="1:2", one_page=False, fit_height_pages=None, exact_scale_pct=None):
         """Landscape + fit-to-width so these wide tendency tables print
         cleanly without columns getting cut off, plus repeating header
-        rows and page numbers for anything that spans multiple pages."""
+        rows and page numbers for anything that spans multiple pages.
+        exact_scale_pct bypasses Excel's fit-to-N-pages guessing entirely
+        and forces a specific print zoom we've already calculated to be
+        safe, so a fixed 2-row-band layout can't get split mid-page."""
         ws.page_setup.orientation = "landscape"
-        ws.page_setup.fitToPage = True
-        ws.page_setup.fitToWidth = 1
-        ws.page_setup.fitToHeight = 1 if one_page else 0
+        if exact_scale_pct is not None:
+            ws.page_setup.fitToPage = False
+            ws.page_setup.scale = exact_scale_pct
+        else:
+            ws.page_setup.fitToPage = True
+            ws.page_setup.fitToWidth = 1
+            if fit_height_pages is not None:
+                ws.page_setup.fitToHeight = max(1, fit_height_pages)
+            else:
+                ws.page_setup.fitToHeight = 1 if one_page else 0
         if repeat_rows:
             ws.print_title_rows = repeat_rows
         ws.page_margins.left = 0.3; ws.page_margins.right = 0.3
@@ -3632,6 +3642,7 @@ def build_excel(plays, opp, week, date):
         r += 1
         hdr(ws17, r, col_start, "FIELD \u2014 RUN", bg="FF8B0000", sz=8, wrap=True)
         hdr(ws17, r, col_start + 1, "BOUND \u2014 RUN", bg="FF8B0000", sz=8, wrap=True)
+        ws17.row_dimensions[r].height = 16
         r += 1
         for i in range(n_run):
             ws17.row_dimensions[r].height = run_row_heights[i]
@@ -3661,6 +3672,7 @@ def build_excel(plays, opp, week, date):
         r += 1
         hdr(ws17, r, col_start, "FIELD \u2014 PASS", bg="FF00008B", sz=8, wrap=True)
         hdr(ws17, r, col_start + 1, "BOUND \u2014 PASS", bg="FF00008B", sz=8, wrap=True)
+        ws17.row_dimensions[r].height = 16
         r += 1
         for i in range(n_pass):
             ws17.row_dimensions[r].height = pass_row_heights[i]
@@ -3696,6 +3708,47 @@ def build_excel(plays, opp, week, date):
 
     row = 1
     any_written = bool(fam_sections)
+
+    # ── Pre-pass: measure every row-band's real height so we can force an
+    # exact print scale that guarantees 2 full row-bands always fit on one
+    # page, instead of guessing at a page count and hoping it works out. ──
+    PAGE_HEIGHT_BUDGET_PT = 480
+    FAMILY_OVERHEAD_PT = 40 + 30
+    BAND_FIXED_PT = 22 + 14 + 16 + 76 + 16
+    BAND_GAP_PT = 30
+    worst_band_height = 0
+    for fam, form_ranked in fam_sections:
+        for i in range(0, len(form_ranked), 3):
+            chunk = form_ranked[i:i + 3]
+            probe_lines = []
+            for form_name, subset in chunk:
+                rf = _fb_quadrant_lines(subset, 'Run', 'F') + _fb_untagged_lines(subset, 'Run')
+                rb = _fb_quadrant_lines(subset, 'Run', 'B')
+                pf = _fb_quadrant_lines(subset, 'Pass', 'F') + _fb_untagged_lines(subset, 'Pass')
+                pb = _fb_quadrant_lines(subset, 'Pass', 'B')
+                probe_lines.append((rf, rb, pf, pb))
+            n_run_p = max(max(len(rf), len(rb), 1) for rf, rb, pf, pb in probe_lines)
+            n_pass_p = max(max(len(pf), len(pb), 1) for rf, rb, pf, pb in probe_lines)
+            run_h = 0
+            for ri in range(n_run_p):
+                texts = []
+                for rf, rb, pf, pb in probe_lines:
+                    if ri < len(rf): texts.append(rf[ri][0])
+                    if ri < len(rb): texts.append(rb[ri][0])
+                run_h += _needed_row_height(texts)
+            pass_h = 0
+            for ri in range(n_pass_p):
+                texts = []
+                for rf, rb, pf, pb in probe_lines:
+                    if ri < len(pf): texts.append(pf[ri][0])
+                    if ri < len(pb): texts.append(pb[ri][0])
+                pass_h += _needed_row_height(texts)
+            band_h = BAND_FIXED_PT + run_h + pass_h
+            worst_band_height = max(worst_band_height, band_h)
+    worst_case_pt = worst_band_height * 2 + BAND_GAP_PT + FAMILY_OVERHEAD_PT
+    height_scale = min(1.0, PAGE_HEIGHT_BUDGET_PT / worst_case_pt) if worst_case_pt > 0 else 1.0
+    exact_scale_pct = max(10, min(100, round(height_scale * 100)))
+
     for fam_idx, (fam, form_ranked) in enumerate(fam_sections):
         ws17.merge_cells(start_row=row, start_column=1, end_row=row, end_column=8)
         _fam_title = ws17.cell(row=row, column=1, value=f"{fam} FORMATIONS")
@@ -3751,7 +3804,7 @@ def build_excel(plays, opp, week, date):
 
     ws17.cell(row=row + 1, column=1, value="Red = ran while FIB'd").font = Font(name=FN, italic=True, size=9, color=RED_TXT)
     ws17.cell(row=row + 2, column=1, value="Green = not FIB'd").font = Font(name=FN, italic=True, size=9, color=GREEN_TXT)
-    print_friendly(ws17, repeat_rows=None, one_page=False)
+    print_friendly(ws17, repeat_rows=None, one_page=False, exact_scale_pct=exact_scale_pct)
 
     # ── Cover Tab (inserted first) ─────────────────────────────
     ws_cov = wb2.create_sheet("0. Cover", 0)
