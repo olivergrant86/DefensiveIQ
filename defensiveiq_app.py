@@ -3600,10 +3600,15 @@ def build_excel(plays, opp, week, date):
 
     def _draw_formation_block(col_start, row_start, fam, form_name, subset, run_field, run_bound, pass_field, pass_bound, n_run, n_pass, run_row_heights, pass_row_heights):
         r = row_start
-        _fb_banner(r, col_start, form_name, bg=CB, sz=12, ht=20)
+        run_total = len([p for p in subset if p['rp'] == 'Run'])
+        pass_total = len([p for p in subset if p['rp'] == 'Pass'])
+        fib_run_total = len([p for p in subset if p['rp'] == 'Run' and _is_fib(p['fib'])])
+        fib_pass_total = len([p for p in subset if p['rp'] == 'Pass' and _is_fib(p['fib'])])
+        _fb_banner(r, col_start, f"{run_total} RUNS \u2014 {form_name} \u2014 {pass_total} PASSES", bg=CB, sz=9, ht=18)
         r += 1
         ws17.merge_cells(start_row=r, start_column=col_start, end_row=r, end_column=col_start + 1)
-        _fbsub = ws17.cell(row=r, column=col_start, value=f"{fam} \u2014 {len(subset)} snaps")
+        _fbsub = ws17.cell(row=r, column=col_start,
+                            value=f"{fib_run_total} FIB Runs   |   {fam} \u2014 {len(subset)} snaps   |   {fib_pass_total} FIB Passes")
         _fbsub.font = Font(name=FN, size=8, italic=True, color=CDG)
         _fbsub.alignment = Alignment(horizontal="center", vertical="center")
         ws17.row_dimensions[r].height = 14
