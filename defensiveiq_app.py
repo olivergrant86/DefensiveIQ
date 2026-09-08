@@ -1,6 +1,7 @@
 import streamlit as st
 import os
 import io
+import math
 import base64
 import pandas as pd
 from collections import Counter
@@ -8,11 +9,16 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter as gcl
 from openpyxl.drawing.image import Image as XLImage
+from openpyxl.drawing.spreadsheet_drawing import OneCellAnchor, AnchorMarker
+from openpyxl.drawing.xdr import XDRPositiveSize2D
+from openpyxl.utils.units import pixels_to_EMU
+from openpyxl.worksheet.pagebreak import Break
 from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 from PIL import Image as PILImage
+from PIL import ImageDraw
 
 # ════════════════════════════════════════════════════════════════
 #  DEFENSIVEIQ  —  Opponent Offensive Tendency Scouting Report
@@ -1584,6 +1590,7 @@ COLUMN_ALIASES = {
     "RECEIVER":    ["OPP RECEIVER", "RECEIVER", "TARGET", "WR"],
     "BACK DEPTH":  ["BACK DEPTH", "BACKDEPTH", "DEPTH"],
     "OPEN/CLOSE":  ["OPEN/CLOSE", "OPEN/CLOSED", "OPEN CLOSE", "OPENCLOSE"],
+    "FIELD/BOUNDARY": ["FIELD/BOUNDARY", "FIELD/BOUND", "FIELD BOUNDARY", "F/B"],
     "PLAY #":      ["PLAY #", "PLAY NUM", "PLAY NUMBER", "PLAYNUM", "PLAY NO"],
 }
 
@@ -1754,6 +1761,7 @@ def load_plays(df):
             'receiver': row.get('RECEIVER', ''),
             'back_depth': str(row.get('BACK DEPTH', '')).strip(),
             'open_close': str(row.get('OPEN/CLOSE', '')).strip(),
+            'field_boundary': str(row.get('FIELD/BOUNDARY', '')).strip().upper()[:1],
             'play_num': row.get('PLAY #', ''),
         })
     return plays
@@ -1935,6 +1943,33 @@ def _play_num(v):
         return str(int(float(s)))
     except (TypeError, ValueError):
         return s
+
+def _is_fib(v):
+    """Different Hudl exports tag FIB differently ('FIB', 'YES', 'Y', 'TRUE',
+    '1') — treat any of those as FIB'd, everything else (blank, 'NO', 'N') as not."""
+    s = str(v).strip().upper()
+    return s in ('FIB', 'YES', 'Y', 'TRUE', '1')
+
+def _ol_diagram_stream():
+    """A small, fixed placeholder diagram (O-O-X-O-O) for coaches to
+    hand-fill the actual formation onto. Same for every formation block —
+    not data-driven."""
+    W, H = 260, 90
+    img = PILImage.new("RGBA", (W, H), (255, 255, 255, 0))
+    draw = ImageDraw.Draw(img)
+    cy = H // 2
+    xs = [40, 90, 130, 170, 220]
+    r = 12
+    for i, x in enumerate(xs):
+        if i == 2:
+            draw.line([(x - r, cy - r), (x + r, cy + r)], fill=(20, 20, 20, 255), width=3)
+            draw.line([(x - r, cy + r), (x + r, cy - r)], fill=(20, 20, 20, 255), width=3)
+        else:
+            draw.ellipse([x - r, cy - r, x + r, cy + r], outline=(20, 20, 20, 255), width=3)
+    out = io.BytesIO()
+    img.save(out, format="PNG")
+    out.seek(0)
+    return out
 
 def compute_player_stats(plays):
     """Build Passing / Rushing / Receiving stat lines per player from
@@ -2465,14 +2500,24 @@ def build_excel(plays, opp, week, date):
     def widths(ws, lst):
         for i, w in enumerate(lst, 1): ws.column_dimensions[gcl(i)].width = w
 
-    def print_friendly(ws, repeat_rows="1:2", one_page=False):
+    def print_friendly(ws, repeat_rows="1:2", one_page=False, fit_height_pages=None, exact_scale_pct=None):
         """Landscape + fit-to-width so these wide tendency tables print
         cleanly without columns getting cut off, plus repeating header
-        rows and page numbers for anything that spans multiple pages."""
+        rows and page numbers for anything that spans multiple pages.
+        exact_scale_pct bypasses Excel's fit-to-N-pages guessing entirely
+        and forces a specific print zoom we've already calculated to be
+        safe, so a fixed 2-row-band layout can't get split mid-page."""
         ws.page_setup.orientation = "landscape"
-        ws.page_setup.fitToPage = True
-        ws.page_setup.fitToWidth = 1
-        ws.page_setup.fitToHeight = 1 if one_page else 0
+        if exact_scale_pct is not None:
+            ws.page_setup.fitToPage = False
+            ws.page_setup.scale = exact_scale_pct
+        else:
+            ws.page_setup.fitToPage = True
+            ws.page_setup.fitToWidth = 1
+            if fit_height_pages is not None:
+                ws.page_setup.fitToHeight = max(1, fit_height_pages)
+            else:
+                ws.page_setup.fitToHeight = 1 if one_page else 0
         if repeat_rows:
             ws.print_title_rows = repeat_rows
         ws.page_margins.left = 0.3; ws.page_margins.right = 0.3
@@ -3521,6 +3566,251 @@ def build_excel(plays, opp, week, date):
             row += 1
 
     print_friendly(ws16, repeat_rows=None, one_page=False)
+
+    # ── Tab 19: Formation Breakdown Sheets (3-column grid) ──────
+    ws17 = wb2.create_sheet("19. Formation Breakdowns")
+    ws17.sheet_properties.tabColor = "0D0D0D"; ws17.sheet_view.showGridLines = False
+    widths(ws17, [22, 22, 3, 22, 22, 3, 22, 22])
+    GREEN_TXT = "FF1E8449"; RED_TXT = "FFD2011A"
+    LANE_STARTS = [1, 4, 7]
+
+    def _needed_row_height(texts, col_chars=22, base_pt=16, line_pt=13):
+        """So a long play name that wraps to 2-3 lines gets a tall enough
+        row instead of being squeezed into a single fixed-height line."""
+        max_lines = 1
+        for t in texts:
+            if not t or t == "\u2014":
+                continue
+            lines = max(1, math.ceil(len(t) / col_chars))
+            max_lines = max(max_lines, lines)
+        return max(base_pt, max_lines * line_pt + 4)
+
+    def _fb_quadrant_lines(subset, rp_filter, side):
+        """Group by (concept, fib-status) so a play split between FIB'd and
+        non-FIB'd snaps shows as two separately-colored lines, not one."""
+        filtered = [p for p in subset if p['rp'] == rp_filter and p['field_boundary'] == side]
+        groups = Counter()
+        for p in filtered:
+            concept = str(p['concept']).strip()
+            if concept in ('', 'nan', 'None'): continue
+            groups[(concept, _is_fib(p['fib']))] += 1
+        lines = []
+        for (concept, is_fib), cnt in sorted(groups.items(), key=lambda kv: -kv[1]):
+            label = f"{concept} ({cnt})" if cnt > 1 else concept
+            lines.append((label, RED_TXT if is_fib else GREEN_TXT))
+        return lines
+
+    def _fb_untagged_lines(subset, rp_filter):
+        """Plays whose FIELD/BOUNDARY tag was neither F nor B (e.g. 'N' or
+        blank) — shown in the Field column so the count always matches the
+        formation total, clearly labeled so it's obvious why."""
+        filtered = [p for p in subset if p['rp'] == rp_filter and p['field_boundary'] not in ('F', 'B')]
+        groups = Counter()
+        for p in filtered:
+            concept = str(p['concept']).strip()
+            if concept in ('', 'nan', 'None'): continue
+            groups[(concept, _is_fib(p['fib']))] += 1
+        lines = []
+        for (concept, is_fib), cnt in sorted(groups.items(), key=lambda kv: -kv[1]):
+            label = (f"{concept} ({cnt}) (F/B Not tagged)" if cnt > 1 else f"{concept} (F/B Not tagged)")
+            lines.append((label, RED_TXT if is_fib else GREEN_TXT))
+        return lines
+
+    def _fb_banner(r, col_start, form_name, bg=CB, sz=15, ht=22):
+        ws17.merge_cells(start_row=r, start_column=col_start, end_row=r, end_column=col_start + 1)
+        c = ws17.cell(row=r, column=col_start, value=form_name)
+        c.font = Font(name=FN, bold=True, size=sz, color="FFD2011A")
+        c.fill = fil(bg)
+        c.alignment = Alignment(horizontal="center", vertical="center")
+        ws17.row_dimensions[r].height = ht
+
+    def _draw_formation_block(col_start, row_start, fam, form_name, subset, run_field, run_bound, pass_field, pass_bound, n_run, n_pass, run_row_heights, pass_row_heights):
+        r = row_start
+        run_total = len([p for p in subset if p['rp'] == 'Run'])
+        pass_total = len([p for p in subset if p['rp'] == 'Pass'])
+        fib_run_total = len([p for p in subset if p['rp'] == 'Run' and _is_fib(p['fib'])])
+        fib_pass_total = len([p for p in subset if p['rp'] == 'Pass' and _is_fib(p['fib'])])
+        _fb_banner(r, col_start, form_name, bg=CB, sz=15, ht=22)
+        r += 1
+        ws17.merge_cells(start_row=r, start_column=col_start, end_row=r, end_column=col_start + 1)
+        _fbsub = ws17.cell(row=r, column=col_start,
+                            value=(f"{run_total} Runs ({fib_run_total} FIB)   |   {fam} \u2014 {len(subset)} snaps   |   "
+                                   f"{pass_total} Passes ({fib_pass_total} FIB)"))
+        _fbsub.font = Font(name=FN, size=8, italic=True, color=CDG)
+        _fbsub.alignment = Alignment(horizontal="center", vertical="center")
+        ws17.row_dimensions[r].height = 14
+        r += 1
+        hdr(ws17, r, col_start, "FIELD \u2014 RUN", bg="FF8B0000", sz=8, wrap=True)
+        hdr(ws17, r, col_start + 1, "BOUND \u2014 RUN", bg="FF8B0000", sz=8, wrap=True)
+        ws17.row_dimensions[r].height = 16
+        r += 1
+        for i in range(n_run):
+            ws17.row_dimensions[r].height = run_row_heights[i]
+            bg = CL if i % 2 == 0 else CW
+            if i < len(run_field):
+                sc(ws17, r, col_start, run_field[i][0], bold=True, sz=8, fc=run_field[i][1], bg=bg, h="left", wrap=True)
+            else:
+                sc(ws17, r, col_start, "\u2014" if i == 0 else "", sz=8, bg=bg, h="left")
+            if i < len(run_bound):
+                sc(ws17, r, col_start + 1, run_bound[i][0], bold=True, sz=8, fc=run_bound[i][1], bg=bg, h="left", wrap=True)
+            else:
+                sc(ws17, r, col_start + 1, "\u2014" if i == 0 else "", sz=8, bg=bg, h="left")
+            r += 1
+        ol_row = r
+        ws17.row_dimensions[ol_row].height = 76
+        ws17.merge_cells(start_row=ol_row, start_column=col_start, end_row=ol_row, end_column=col_start + 1)
+        ol_img = XLImage(_ol_diagram_stream())
+        img_w, img_h = 150, 52
+        ol_img.width, ol_img.height = img_w, img_h
+        lane_px = (22 * 7 + 5) * 2
+        x_offset = max(0, (lane_px - img_w) // 2)
+        row_h_px = int(76 * 96 / 72)
+        y_offset = max(0, (row_h_px - img_h) // 2)
+        marker = AnchorMarker(col=col_start - 1, colOff=pixels_to_EMU(x_offset), row=ol_row - 1, rowOff=pixels_to_EMU(y_offset))
+        ol_img.anchor = OneCellAnchor(_from=marker, ext=XDRPositiveSize2D(pixels_to_EMU(img_w), pixels_to_EMU(img_h)))
+        ws17.add_image(ol_img)
+        r += 1
+        hdr(ws17, r, col_start, "FIELD \u2014 PASS", bg="FF00008B", sz=8, wrap=True)
+        hdr(ws17, r, col_start + 1, "BOUND \u2014 PASS", bg="FF00008B", sz=8, wrap=True)
+        ws17.row_dimensions[r].height = 16
+        r += 1
+        for i in range(n_pass):
+            ws17.row_dimensions[r].height = pass_row_heights[i]
+            bg = CL if i % 2 == 0 else CW
+            if i < len(pass_field):
+                sc(ws17, r, col_start, pass_field[i][0], bold=True, sz=8, fc=pass_field[i][1], bg=bg, h="left", wrap=True)
+            else:
+                sc(ws17, r, col_start, "\u2014" if i == 0 else "", sz=8, bg=bg, h="left")
+            if i < len(pass_bound):
+                sc(ws17, r, col_start + 1, pass_bound[i][0], bold=True, sz=8, fc=pass_bound[i][1], bg=bg, h="left", wrap=True)
+            else:
+                sc(ws17, r, col_start + 1, "\u2014" if i == 0 else "", sz=8, bg=bg, h="left")
+            r += 1
+        return r
+
+    fam_groups = {}
+    for p in plays:
+        fam = str(p.get('form_family', '')).strip()
+        if fam in ('', 'nan', 'None'): continue
+        fam_groups.setdefault(fam, []).append(p)
+    fam_ranked = sorted(fam_groups.items(), key=lambda kv: -len(kv[1]))
+
+    fam_sections = []
+    for fam, fam_plays in fam_ranked:
+        form_groups = {}
+        for p in fam_plays:
+            f = str(p.get('form', '')).strip()
+            if f in ('', 'nan', 'None'): continue
+            form_groups.setdefault(f, []).append(p)
+        form_ranked = sorted(form_groups.items(), key=lambda kv: -len(kv[1]))
+        if form_ranked:
+            fam_sections.append((fam, form_ranked))
+
+    row = 1
+    any_written = bool(fam_sections)
+
+    # ── Pre-pass: measure every row-band's real height so we can force an
+    # exact print scale that guarantees 2 full row-bands always fit on one
+    # page, instead of guessing at a page count and hoping it works out. ──
+    PAGE_HEIGHT_BUDGET_PT = 480
+    FAMILY_OVERHEAD_PT = 40 + 30
+    BAND_FIXED_PT = 22 + 14 + 16 + 76 + 16
+    BAND_GAP_PT = 30
+    worst_band_height = 0
+    for fam, form_ranked in fam_sections:
+        for i in range(0, len(form_ranked), 3):
+            chunk = form_ranked[i:i + 3]
+            probe_lines = []
+            for form_name, subset in chunk:
+                rf = _fb_quadrant_lines(subset, 'Run', 'F') + _fb_untagged_lines(subset, 'Run')
+                rb = _fb_quadrant_lines(subset, 'Run', 'B')
+                pf = _fb_quadrant_lines(subset, 'Pass', 'F') + _fb_untagged_lines(subset, 'Pass')
+                pb = _fb_quadrant_lines(subset, 'Pass', 'B')
+                probe_lines.append((rf, rb, pf, pb))
+            n_run_p = max(max(len(rf), len(rb), 1) for rf, rb, pf, pb in probe_lines)
+            n_pass_p = max(max(len(pf), len(pb), 1) for rf, rb, pf, pb in probe_lines)
+            run_h = 0
+            for ri in range(n_run_p):
+                texts = []
+                for rf, rb, pf, pb in probe_lines:
+                    if ri < len(rf): texts.append(rf[ri][0])
+                    if ri < len(rb): texts.append(rb[ri][0])
+                run_h += _needed_row_height(texts)
+            pass_h = 0
+            for ri in range(n_pass_p):
+                texts = []
+                for rf, rb, pf, pb in probe_lines:
+                    if ri < len(pf): texts.append(pf[ri][0])
+                    if ri < len(pb): texts.append(pb[ri][0])
+                pass_h += _needed_row_height(texts)
+            band_h = BAND_FIXED_PT + run_h + pass_h
+            worst_band_height = max(worst_band_height, band_h)
+    worst_case_pt = worst_band_height * 2 + BAND_GAP_PT + FAMILY_OVERHEAD_PT
+    height_scale = min(1.0, PAGE_HEIGHT_BUDGET_PT / worst_case_pt) if worst_case_pt > 0 else 1.0
+    exact_scale_pct = max(10, min(100, round(height_scale * 100)))
+
+    for fam_idx, (fam, form_ranked) in enumerate(fam_sections):
+        ws17.merge_cells(start_row=row, start_column=1, end_row=row, end_column=8)
+        _fam_title = ws17.cell(row=row, column=1, value=f"{fam} FORMATIONS")
+        _fam_title.font = Font(name=FN, bold=True, size=22, color=CW)
+        _fam_title.fill = fil("FFD2011A")
+        _fam_title.alignment = Alignment(horizontal="center", vertical="center")
+        ws17.row_dimensions[row].height = 40
+        row += 2
+
+        row_band_count = 0
+        total_chunks = (len(form_ranked) + 2) // 3
+        for chunk_idx, i in enumerate(range(0, len(form_ranked), 3)):
+            chunk = form_ranked[i:i + 3]
+            chunk_lines = []
+            for form_name, subset in chunk:
+                rf = _fb_quadrant_lines(subset, 'Run', 'F') + _fb_untagged_lines(subset, 'Run')
+                rb = _fb_quadrant_lines(subset, 'Run', 'B')
+                pf = _fb_quadrant_lines(subset, 'Pass', 'F') + _fb_untagged_lines(subset, 'Pass')
+                pb = _fb_quadrant_lines(subset, 'Pass', 'B')
+                chunk_lines.append((rf, rb, pf, pb))
+            n_run = max(max(len(rf), len(rb), 1) for rf, rb, pf, pb in chunk_lines)
+            n_pass = max(max(len(pf), len(pb), 1) for rf, rb, pf, pb in chunk_lines)
+            run_row_heights = []
+            for ri in range(n_run):
+                texts = []
+                for rf, rb, pf, pb in chunk_lines:
+                    if ri < len(rf): texts.append(rf[ri][0])
+                    if ri < len(rb): texts.append(rb[ri][0])
+                run_row_heights.append(_needed_row_height(texts))
+            pass_row_heights = []
+            for ri in range(n_pass):
+                texts = []
+                for rf, rb, pf, pb in chunk_lines:
+                    if ri < len(pf): texts.append(pf[ri][0])
+                    if ri < len(pb): texts.append(pb[ri][0])
+                pass_row_heights.append(_needed_row_height(texts))
+            natural_band_height = BAND_FIXED_PT + sum(run_row_heights) + sum(pass_row_heights)
+            deficit = worst_band_height - natural_band_height
+            if deficit > 0 and (n_run + n_pass) > 0:
+                extra_per_row = deficit / (n_run + n_pass)
+                run_row_heights = [h + extra_per_row for h in run_row_heights]
+                pass_row_heights = [h + extra_per_row for h in pass_row_heights]
+            end_rows = []
+            for lane_idx, (form_name, subset) in enumerate(chunk):
+                rf, rb, pf, pb = chunk_lines[lane_idx]
+                end_rows.append(_draw_formation_block(LANE_STARTS[lane_idx], row, fam, form_name, subset,
+                                                       rf, rb, pf, pb, n_run, n_pass, run_row_heights, pass_row_heights))
+            row = max(end_rows) + 2
+            row_band_count += 1
+            if row_band_count % 2 == 0 and chunk_idx + 1 < total_chunks:
+                ws17.row_breaks.append(Break(id=row - 1))
+
+        if fam_idx + 1 < len(fam_sections):
+            ws17.row_breaks.append(Break(id=row - 1))
+
+    if not any_written:
+        ws17.cell(row=1, column=1, value="Not enough tagged formation data to build formation breakdowns.").font = \
+            Font(name=FN, sz=11, italic=True, color=CDG)
+
+    ws17.cell(row=row + 1, column=1, value="Red = ran while FIB'd").font = Font(name=FN, italic=True, size=9, color=RED_TXT)
+    ws17.cell(row=row + 2, column=1, value="Green = not FIB'd").font = Font(name=FN, italic=True, size=9, color=GREEN_TXT)
+    print_friendly(ws17, repeat_rows=None, one_page=False, exact_scale_pct=exact_scale_pct)
 
     # ── Cover Tab (inserted first) ─────────────────────────────
     ws_cov = wb2.create_sheet("0. Cover", 0)
