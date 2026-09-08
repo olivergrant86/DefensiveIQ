@@ -1,6 +1,7 @@
 import streamlit as st
 import os
 import io
+import math
 import base64
 import pandas as pd
 from collections import Counter
@@ -8,11 +9,16 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter as gcl
 from openpyxl.drawing.image import Image as XLImage
+from openpyxl.drawing.spreadsheet_drawing import OneCellAnchor, AnchorMarker
+from openpyxl.drawing.xdr import XDRPositiveSize2D
+from openpyxl.utils.units import pixels_to_EMU
+from openpyxl.worksheet.pagebreak import Break
 from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 from PIL import Image as PILImage
+from PIL import ImageDraw
 
 # ════════════════════════════════════════════════════════════════
 #  DEFENSIVEIQ  —  Opponent Offensive Tendency Scouting Report
@@ -1584,6 +1590,8 @@ COLUMN_ALIASES = {
     "RECEIVER":    ["OPP RECEIVER", "RECEIVER", "TARGET", "WR"],
     "BACK DEPTH":  ["BACK DEPTH", "BACKDEPTH", "DEPTH"],
     "OPEN/CLOSE":  ["OPEN/CLOSE", "OPEN/CLOSED", "OPEN CLOSE", "OPENCLOSE"],
+    "FIELD/BOUNDARY": ["FIELD/BOUNDARY", "FIELD/BOUND", "FIELD BOUNDARY", "F/B"],
+    "PLAY #":      ["PLAY #", "PLAY NUM", "PLAY NUMBER", "PLAYNUM", "PLAY NO"],
 }
 
 def _normalize(s):
@@ -1753,6 +1761,8 @@ def load_plays(df):
             'receiver': row.get('RECEIVER', ''),
             'back_depth': str(row.get('BACK DEPTH', '')).strip(),
             'open_close': str(row.get('OPEN/CLOSE', '')).strip(),
+            'field_boundary': str(row.get('FIELD/BOUNDARY', '')).strip().upper()[:1],
+            'play_num': row.get('PLAY #', ''),
         })
     return plays
 
@@ -1924,6 +1934,42 @@ def _jersey(v):
         return f"#{int(f)}"
     except (TypeError, ValueError):
         return f"#{s}"
+
+def _play_num(v):
+    """Format a raw PLAY # cell cleanly (handles float-from-Excel like 12.0)."""
+    s = str(v).strip()
+    if s in ('', 'nan', 'None'): return "\u2014"
+    try:
+        return str(int(float(s)))
+    except (TypeError, ValueError):
+        return s
+
+def _is_fib(v):
+    """Different Hudl exports tag FIB differently ('FIB', 'YES', 'Y', 'TRUE',
+    '1') — treat any of those as FIB'd, everything else (blank, 'NO', 'N') as not."""
+    s = str(v).strip().upper()
+    return s in ('FIB', 'YES', 'Y', 'TRUE', '1')
+
+def _ol_diagram_stream():
+    """A small, fixed placeholder diagram (O-O-X-O-O) for coaches to
+    hand-fill the actual formation onto. Same for every formation block —
+    not data-driven."""
+    W, H = 260, 90
+    img = PILImage.new("RGBA", (W, H), (255, 255, 255, 0))
+    draw = ImageDraw.Draw(img)
+    cy = H // 2
+    xs = [40, 90, 130, 170, 220]
+    r = 12
+    for i, x in enumerate(xs):
+        if i == 2:
+            draw.line([(x - r, cy - r), (x + r, cy + r)], fill=(20, 20, 20, 255), width=3)
+            draw.line([(x - r, cy + r), (x + r, cy - r)], fill=(20, 20, 20, 255), width=3)
+        else:
+            draw.ellipse([x - r, cy - r, x + r, cy + r], outline=(20, 20, 20, 255), width=3)
+    out = io.BytesIO()
+    img.save(out, format="PNG")
+    out.seek(0)
+    return out
 
 def compute_player_stats(plays):
     """Build Passing / Rushing / Receiving stat lines per player from
@@ -2665,7 +2711,7 @@ def build_excel(plays, opp, week, date):
     ws6 = wb2.create_sheet("6. Down & Distance")
     ws6.sheet_properties.tabColor = "0E7060"; ws6.sheet_view.showGridLines = False
     NC6 = 13
-    widths(ws6, [20, 8, 8, 8, 20, 20, 20, 20, 20, 20, 20, 20, 20])
+    widths(ws6, [20, 8, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20])
     banner(ws6, 1, "DOWN & DISTANCE TENDENCIES  —  Favorite Runs, Passes & Formations by Situation", NC6, bg=CTe, sz=13, ht=28)
     for c, txt, bg in [(1, "SITUATION", CB), (2, "Plays", CB), (3, "Run%", CB), (4, "Pass%", CB),
                        (5, "#1 Run Concept", CR), (6, "#2 Run Concept", CR), (7, "#3 Run Concept", CR),
@@ -2685,6 +2731,55 @@ def build_excel(plays, opp, week, date):
         for i, cn in enumerate([5, 6, 7]): sc(ws6, r, cn, t3rc[i], sz=9, bg=CRB, wrap=True)
         for i, cn in enumerate([8, 9, 10]): sc(ws6, r, cn, t3pc[i], sz=9, bg=CPB, wrap=True)
         for i, cn in enumerate([11, 12, 13]): sc(ws6, r, cn, t3f[i], sz=9, bg="FFEDE7F6", wrap=True)
+
+    # ── Below-table add-on: top 3 run/pass plays (+ formation) per down ──
+    row = 16
+    NC6B = 14
+    banner(ws6, row, "TOP 3 RUN & PASS PLAYS BY DOWN  \u2014  with Formation Most Commonly Run From", NC6B, bg=CTe, sz=12, ht=26)
+    row += 1
+    for c, txt, bg in [(1, "DOWN", CB), (2, "Snaps", CB),
+                       (3, "#1 Run Play", CR), (4, "Formation", CR),
+                       (5, "#2 Run Play", CR), (6, "Formation", CR),
+                       (7, "#3 Run Play", CR), (8, "Formation", CR),
+                       (9, "#1 Pass Play", CBl), (10, "Formation", CBl),
+                       (11, "#2 Pass Play", CBl), (12, "Formation", CBl),
+                       (13, "#3 Pass Play", CBl), (14, "Formation", CBl)]:
+        hdr(ws6, row, c, txt, bg=bg, sz=8, wrap=True)
+    row += 1
+
+    def _top3_play_and_form(sp, rp_filter, n=3):
+        g = [p for p in sp if p['rp'] == rp_filter]
+        cc = Counter(str(p['concept']) for p in g if str(p['concept']).strip() not in ('', 'nan', 'None'))
+        top = cc.most_common(n)
+        out = []
+        for concept, cnt in top:
+            fg = [p for p in g if str(p['concept']) == concept]
+            fc2 = Counter(str(p['form']) for p in fg if str(p['form']).strip() not in ('', 'nan', 'None'))
+            form = fc2.most_common(1)[0][0] if fc2 else "\u2014"
+            out.append((f"{concept} ({cnt})", form))
+        while len(out) < n:
+            out.append(("\u2014", "\u2014"))
+        return out
+
+    down_labels = {1: "1st Down", 2: "2nd Down", 3: "3rd Down", 4: "4th Down"}
+    for ri, dn_v in enumerate([1, 2, 3, 4]):
+        r = row + ri
+        ws6.row_dimensions[r].height = 24
+        bg = CL if ri % 2 == 0 else CW
+        sp = [p for p in plays if p['dn'] == dn_v]
+        top_runs = _top3_play_and_form(sp, 'Run')
+        top_passes = _top3_play_and_form(sp, 'Pass')
+        sc(ws6, r, 1, down_labels[dn_v], bold=True, sz=10, fc=CW, bg=CTe, h="left")
+        sc(ws6, r, 2, len(sp), bold=True, sz=10, fc="FF000000", bg=bg, fmt="0")
+        col = 3
+        for play, form in top_runs:
+            sc(ws6, r, col, play, sz=9, fc="FF8B0000", bg=CRB, wrap=True, h="left")
+            sc(ws6, r, col + 1, form, sz=9, bg=CRB, wrap=True, h="left")
+            col += 2
+        for play, form in top_passes:
+            sc(ws6, r, col, play, sz=9, fc="FF00008B", bg=CPB, wrap=True, h="left")
+            sc(ws6, r, col + 1, form, sz=9, bg=CPB, wrap=True, h="left")
+            col += 2
     ws6.freeze_panes = "B3"
     print_friendly(ws6, "1:2")
 
@@ -3051,8 +3146,45 @@ def build_excel(plays, opp, week, date):
             ws.merge_cells(f"A3:{gcl(NC)}3")
             c = ws.cell(row=3, column=1, value="Not enough tagged data for this section.")
             c.font = Font(name=FN, sz=10, italic=True, color=CDG); c.alignment = Alignment(horizontal="center")
+            last_row = 3
+        else:
+            last_row = 2 + len(ranked)
         ws.freeze_panes = "B3"
         print_friendly(ws, "1:2")
+        return last_row
+
+    def backfield_breakdown(ws, start_row):
+        """A second table on the same tab — run/pass tendency and top 3
+        run/pass plays for each backfield alignment."""
+        NCb = 10
+        banner(ws, start_row, "BACKFIELD TENDENCIES  \u2014  Run/Pass Split & Favorite Plays", NCb,
+               bg="FF1A5276", sz=13, ht=28)
+        hdr_row = start_row + 1
+        for c, txt, bg in [(1, "GROUP", CB), (2, "Snaps", CB), (3, "Run%", CB), (4, "Pass%", CB),
+                           (5, "#1 Run Play", CR), (6, "#2 Run Play", CR), (7, "#3 Run Play", CR),
+                           (8, "#1 Pass Play", CBl), (9, "#2 Pass Play", CBl), (10, "#3 Pass Play", CBl)]:
+            hdr(ws, hdr_row, c, txt, bg=bg, sz=8, wrap=True)
+        groups = {}
+        for p in plays:
+            v = str(p.get('backfield', '')).strip()
+            if v in ('', 'nan', 'None'): v = "(Blank)"
+            groups.setdefault(v, []).append(p)
+        ranked = sorted(groups.items(), key=lambda kv: -len(kv[1]))
+        for ri, (v, g) in enumerate(ranked):
+            r = hdr_row + 1 + ri; ws.row_dimensions[r].height = 24
+            bg = CL if ri % 2 == 0 else CW
+            gr = [p for p in g if p['rp'] == 'Run']; gp = [p for p in g if p['rp'] == 'Pass']
+            sc(ws, r, 1, v, bold=True, sz=9, fc=CW, bg="FF1A5276", h="left")
+            sc(ws, r, 2, len(g), bold=True, sz=10, fc="FF000000", bg=bg, fmt="0")
+            sc(ws, r, 3, round(len(gr) / len(g), 2) if g else "", bold=True, sz=10, fc="FF8B0000", bg=CRB, fmt="0%")
+            sc(ws, r, 4, round(len(gp) / len(g), 2) if g else "", bold=True, sz=10, fc="FF00008B", bg=CPB, fmt="0%")
+            t3rc = top3_str(gr, 'concept', 3); t3pc = top3_str(gp, 'concept', 3)
+            for i, cn in enumerate([5, 6, 7]): sc(ws, r, cn, t3rc[i], sz=9, bg=CRB, wrap=True)
+            for i, cn in enumerate([8, 9, 10]): sc(ws, r, cn, t3pc[i], sz=9, bg=CPB, wrap=True)
+        if not ranked:
+            ws.merge_cells(f"A{hdr_row+1}:{gcl(NCb)}{hdr_row+1}")
+            c = ws.cell(row=hdr_row + 1, column=1, value="Not enough backfield data tagged.")
+            c.font = Font(name=FN, sz=10, italic=True, color=CDG); c.alignment = Alignment(horizontal="center")
 
     ws13 = wb2.create_sheet("13. Form Family Tendencies")
     group_tab(ws13, 'form_family', "FORM FAMILY TENDENCIES  \u2014  Run/Pass Split, Favorite Plays & Formations",
@@ -3063,8 +3195,9 @@ def build_excel(plays, opp, week, date):
               "FF784212", "784212", empty_label="Not FIB")
 
     ws14b = wb2.create_sheet("15. Back Depth")
-    group_tab(ws14b, 'back_depth', "BACK DEPTH TENDENCIES  \u2014  Run/Pass Split, Favorite Plays & Formations",
+    _bd_last_row = group_tab(ws14b, 'back_depth', "BACK DEPTH TENDENCIES  \u2014  Run/Pass Split, Favorite Plays & Formations",
               "FF0E7060", "0E7060", empty_label="(Blank)")
+    backfield_breakdown(ws14b, _bd_last_row + 2)
 
     # ── Tab 16: Open/Closed (with cross-break by Form Family) ─
     ws14c = wb2.create_sheet("16. Open-Closed")
@@ -3247,6 +3380,378 @@ def build_excel(plays, opp, week, date):
 
     ws15.freeze_panes = "A2"
     print_friendly(ws15, repeat_rows=None, one_page=True)
+
+    # ── Tab 18: Practice Scripts ────────────────────────────────
+    ws16 = wb2.create_sheet("18. Practice Scripts")
+    ws16.sheet_properties.tabColor = "0D0D0D"; ws16.sheet_view.showGridLines = False
+    NC16 = 9
+    widths(ws16, [8, 8, 8, 10, 22, 24, 8, 10, 30])
+    _DN_ORD = {1: "1st", 2: "2nd", 3: "3rd", 4: "4th"}
+
+    def _select_real_plays(group_plays, n_slots):
+        """Pick actual logged plays (not aggregates) for n_slots reps,
+        proportional to how often each concept is really called, preferring
+        the instance(s) tagged with that concept's most common formation."""
+        if not group_plays or n_slots <= 0:
+            return []
+        cc = Counter(str(p['concept']) for p in group_plays if str(p['concept']).strip() not in ('', 'nan', 'None'))
+        if not cc:
+            return []
+        total_calls = sum(cc.values())
+        ranked = cc.most_common()
+        raw = [(concept, n_slots * cnt / total_calls) for concept, cnt in ranked]
+        alloc = {concept: int(x) for concept, x in raw}
+        remainder = n_slots - sum(alloc.values())
+        fracs = sorted(raw, key=lambda t: -(t[1] - int(t[1])))
+        i = 0
+        while remainder > 0 and fracs:
+            alloc[fracs[i % len(fracs)][0]] += 1
+            remainder -= 1
+            i += 1
+        selected = []
+        for concept, _cnt in ranked:
+            cnt = alloc.get(concept, 0)
+            if cnt <= 0: continue
+            concept_plays = [p for p in group_plays if str(p['concept']) == concept]
+            fc2 = Counter(str(p['form']) for p in concept_plays if str(p['form']).strip() not in ('', 'nan', 'None'))
+            top_form = fc2.most_common(1)[0][0] if fc2 else None
+            preferred = [p for p in concept_plays if str(p['form']) == top_form] if top_form else []
+            others = [p for p in concept_plays if p not in preferred]
+            pool = preferred + others
+            chosen = list(pool[:cnt])
+            while len(chosen) < cnt and pool:
+                chosen.append(pool[len(chosen) % len(pool)])
+            selected.extend(chosen[:cnt])
+        return selected
+
+    def _build_script(down_plays, total_reps):
+        """Real plays, run/pass split matched to their actual tendency,
+        proportionally weighted toward their most-called plays."""
+        if not down_plays:
+            return []
+        runs = [p for p in down_plays if p['rp'] == 'Run']
+        passes = [p for p in down_plays if p['rp'] == 'Pass']
+        run_pct = len(runs) / len(down_plays) if down_plays else 0
+        n_runs = max(0, min(total_reps, round(total_reps * run_pct)))
+        n_passes = total_reps - n_runs
+        run_script = _select_real_plays(runs, n_runs)
+        pass_script = _select_real_plays(passes, n_passes)
+        script = []
+        i_r = i_p = 0
+        nr, npass = len(run_script), len(pass_script)
+        for _ in range(nr + npass):
+            r_ratio = i_r / nr if nr else 1
+            p_ratio = i_p / npass if npass else 1
+            if nr and (not npass or r_ratio <= p_ratio):
+                script.append(run_script[i_r]); i_r += 1
+            else:
+                script.append(pass_script[i_p]); i_p += 1
+        return script
+
+    def _write_script_rows(ws, start_row, script):
+        r = start_row
+        for i, p in enumerate(script, 1):
+            bg = CL if i % 2 == 0 else CW
+            play_type = p['rp']
+            type_color = "FF8B0000" if play_type == "Run" else "FF00008B"
+            type_bg = CRB if play_type == "Run" else CPB
+            sc(ws, r, 1, i, bold=True, sz=9, fc="FF000000", bg=bg, fmt="0")
+            sc(ws, r, 2, play_type, bold=True, sz=9, fc=type_color, bg=type_bg)
+            sc(ws, r, 3, _DN_ORD.get(p['dn'], str(p['dn'])), sz=9, bg=bg)
+            sc(ws, r, 4, p['dist'], sz=9, bg=bg, fmt="0")
+            sc(ws, r, 5, p['concept'], bold=True, sz=9, fc="FF000000", bg=bg, h="left")
+            sc(ws, r, 6, p['form'], sz=9, bg=bg, h="left")
+            sc(ws, r, 7, p['hash'] or "\u2014", sz=9, bg=bg)
+            sc(ws, r, 8, _play_num(p.get('play_num', '')), sz=9, bg=bg)
+            sc(ws, r, 9, "", sz=9, bg=CYB)
+            r += 1
+        return r
+
+    row = 1
+
+    # ── 1st & 2nd Down (combined) ──
+    combo_plays = [p for p in plays if p['dn'] in (1, 2)]
+    n_total = len(combo_plays)
+    run_n = len([p for p in combo_plays if p['rp'] == 'Run'])
+    run_pct_disp = round(run_n / n_total * 100) if n_total else 0
+    pass_pct_disp = 100 - run_pct_disp if n_total else 0
+    banner(ws16, row, "1ST & 2ND DOWN PRACTICE SCRIPT", NC16, bg=CB, sz=13, ht=26)
+    row += 1
+    ws16.merge_cells(start_row=row, start_column=1, end_row=row, end_column=NC16)
+    _sub = ws16.cell(row=row, column=1,
+                      value=f"Based on their actual {run_pct_disp}% Run / {pass_pct_disp}% Pass split \u2014 {n_total} snaps tagged")
+    _sub.font = Font(name=FN, size=9, italic=True, color=CDG)
+    _sub.alignment = Alignment(horizontal="center", vertical="center")
+    ws16.row_dimensions[row].height = 16
+    row += 1
+    for c, txt, bg in [(1, "REP #", CTe), (2, "TYPE", CTe), (3, "DOWN", CTe), (4, "DIST", CTe),
+                       (5, "PLAY", CTe), (6, "FORMATION", CTe), (7, "HASH", CTe), (8, "PLAY #", CTe), (9, "NOTES", CTe)]:
+        hdr(ws16, row, c, txt, bg=bg, sz=9)
+    row += 1
+    script = _build_script(combo_plays, 20)
+    if not script:
+        ws16.merge_cells(start_row=row, start_column=1, end_row=row, end_column=NC16)
+        c = ws16.cell(row=row, column=1, value="Not enough tagged data for 1st/2nd down to build a script.")
+        c.font = Font(name=FN, sz=10, italic=True, color=CDG); c.alignment = Alignment(horizontal="center")
+        row += 1
+    else:
+        row = _write_script_rows(ws16, row, script)
+    row += 2
+
+    # ── 3rd / 4th Down (bucketed by distance) ──
+    banner(ws16, row, "3RD / 4TH DOWN PRACTICE SCRIPT", NC16, bg=CB, sz=13, ht=26)
+    row += 1
+    ws16.merge_cells(start_row=row, start_column=1, end_row=row, end_column=NC16)
+    _sub2 = ws16.cell(row=row, column=1,
+                       value="Weighted by down & distance situation \u2014 run/pass split matched per bucket")
+    _sub2.font = Font(name=FN, size=9, italic=True, color=CDG)
+    _sub2.alignment = Alignment(horizontal="center", vertical="center")
+    ws16.row_dimensions[row].height = 16
+    row += 1
+    for c, txt, bg in [(1, "REP #", CTe), (2, "TYPE", CTe), (3, "DOWN", CTe), (4, "DIST", CTe),
+                       (5, "PLAY", CTe), (6, "FORMATION", CTe), (7, "HASH", CTe), (8, "PLAY #", CTe), (9, "NOTES", CTe)]:
+        hdr(ws16, row, c, txt, bg=bg, sz=9)
+    row += 1
+
+    buckets = [
+        ("3RD & 1-2", lambda p: p['dn'] == 3 and 1 <= p['dist'] <= 2, 3),
+        ("3RD & 3-6", lambda p: p['dn'] == 3 and 3 <= p['dist'] <= 6, 5),
+        ("3RD & 7-11", lambda p: p['dn'] == 3 and 7 <= p['dist'] <= 11, 5),
+        ("3RD & 12+", lambda p: p['dn'] == 3 and p['dist'] >= 12, 3),
+        ("4TH DOWN", lambda p: p['dn'] == 4, 4),
+    ]
+    rep_counter = 0
+    for label, fn, n_reps in buckets:
+        bucket_plays = [p for p in plays if fn(p)]
+        ws16.merge_cells(start_row=row, start_column=1, end_row=row, end_column=NC16)
+        _lbl = ws16.cell(row=row, column=1, value=f"  {label}  ({len(bucket_plays)} snaps tagged, {n_reps} reps)")
+        _lbl.font = Font(name=FN, bold=True, size=9, color=CW)
+        _lbl.fill = fil("FF4A235A")
+        _lbl.alignment = Alignment(horizontal="left", vertical="center")
+        ws16.row_dimensions[row].height = 18
+        row += 1
+        bucket_script = _build_script(bucket_plays, n_reps)
+        if not bucket_script:
+            ws16.merge_cells(start_row=row, start_column=1, end_row=row, end_column=NC16)
+            c = ws16.cell(row=row, column=1, value="Not enough tagged data for this situation.")
+            c.font = Font(name=FN, sz=9, italic=True, color=CDG); c.alignment = Alignment(horizontal="center")
+            row += 1
+            continue
+        for p in bucket_script:
+            rep_counter += 1
+            i = rep_counter
+            bg = CL if i % 2 == 0 else CW
+            play_type = p['rp']
+            type_color = "FF8B0000" if play_type == "Run" else "FF00008B"
+            type_bg = CRB if play_type == "Run" else CPB
+            sc(ws16, row, 1, i, bold=True, sz=9, fc="FF000000", bg=bg, fmt="0")
+            sc(ws16, row, 2, play_type, bold=True, sz=9, fc=type_color, bg=type_bg)
+            sc(ws16, row, 3, _DN_ORD.get(p['dn'], str(p['dn'])), sz=9, bg=bg)
+            sc(ws16, row, 4, p['dist'], sz=9, bg=bg, fmt="0")
+            sc(ws16, row, 5, p['concept'], bold=True, sz=9, fc="FF000000", bg=bg, h="left")
+            sc(ws16, row, 6, p['form'], sz=9, bg=bg, h="left")
+            sc(ws16, row, 7, p['hash'] or "\u2014", sz=9, bg=bg)
+            sc(ws16, row, 8, _play_num(p.get('play_num', '')), sz=9, bg=bg)
+            sc(ws16, row, 9, "", sz=9, bg=CYB)
+            row += 1
+
+    print_friendly(ws16, repeat_rows=None, one_page=False)
+
+    # ── Tab 19: Formation Breakdown Sheets (3-column grid) ──────
+    ws17 = wb2.create_sheet("19. Formation Breakdowns")
+    ws17.sheet_properties.tabColor = "0D0D0D"; ws17.sheet_view.showGridLines = False
+    widths(ws17, [22, 22, 3, 22, 22, 3, 22, 22])
+    GREEN_TXT = "FF1E8449"; RED_TXT = "FFD2011A"
+    LANE_STARTS = [1, 4, 7]
+
+    def _needed_row_height(texts, col_chars=22, base_pt=16, line_pt=13):
+        """So a long play name that wraps to 2-3 lines gets a tall enough
+        row instead of being squeezed into a single fixed-height line."""
+        max_lines = 1
+        for t in texts:
+            if not t or t == "\u2014":
+                continue
+            lines = max(1, math.ceil(len(t) / col_chars))
+            max_lines = max(max_lines, lines)
+        return max(base_pt, max_lines * line_pt + 4)
+
+    def _fb_quadrant_lines(subset, rp_filter, side):
+        """Group by (concept, fib-status) so a play split between FIB'd and
+        non-FIB'd snaps shows as two separately-colored lines, not one."""
+        filtered = [p for p in subset if p['rp'] == rp_filter and p['field_boundary'] == side]
+        groups = Counter()
+        for p in filtered:
+            concept = str(p['concept']).strip()
+            if concept in ('', 'nan', 'None'): continue
+            groups[(concept, _is_fib(p['fib']))] += 1
+        lines = []
+        for (concept, is_fib), cnt in sorted(groups.items(), key=lambda kv: -kv[1]):
+            label = f"{concept} ({cnt})" if cnt > 1 else concept
+            lines.append((label, RED_TXT if is_fib else GREEN_TXT))
+        return lines
+
+    def _fb_untagged_lines(subset, rp_filter):
+        """Plays whose FIELD/BOUNDARY tag was neither F nor B (e.g. 'N' or
+        blank) — shown in the Field column so the count always matches the
+        formation total, clearly labeled so it's obvious why."""
+        filtered = [p for p in subset if p['rp'] == rp_filter and p['field_boundary'] not in ('F', 'B')]
+        groups = Counter()
+        for p in filtered:
+            concept = str(p['concept']).strip()
+            if concept in ('', 'nan', 'None'): continue
+            groups[(concept, _is_fib(p['fib']))] += 1
+        lines = []
+        for (concept, is_fib), cnt in sorted(groups.items(), key=lambda kv: -kv[1]):
+            label = (f"{concept} ({cnt}) (F/B Not tagged)" if cnt > 1 else f"{concept} (F/B Not tagged)")
+            lines.append((label, RED_TXT if is_fib else GREEN_TXT))
+        return lines
+
+    def _fb_banner(r, col_start, form_name, bg=CB, sz=15, ht=22):
+        ws17.merge_cells(start_row=r, start_column=col_start, end_row=r, end_column=col_start + 1)
+        c = ws17.cell(row=r, column=col_start, value=form_name)
+        c.font = Font(name=FN, bold=True, size=sz, color="FFD2011A")
+        c.fill = fil(bg)
+        c.alignment = Alignment(horizontal="center", vertical="center")
+        ws17.row_dimensions[r].height = ht
+
+    def _draw_formation_block(col_start, row_start, fam, form_name, subset, run_field, run_bound, pass_field, pass_bound, n_run, n_pass, run_row_heights, pass_row_heights):
+        r = row_start
+        run_total = len([p for p in subset if p['rp'] == 'Run'])
+        pass_total = len([p for p in subset if p['rp'] == 'Pass'])
+        fib_run_total = len([p for p in subset if p['rp'] == 'Run' and _is_fib(p['fib'])])
+        fib_pass_total = len([p for p in subset if p['rp'] == 'Pass' and _is_fib(p['fib'])])
+        _fb_banner(r, col_start, form_name, bg=CB, sz=15, ht=22)
+        r += 1
+        ws17.merge_cells(start_row=r, start_column=col_start, end_row=r, end_column=col_start + 1)
+        _fbsub = ws17.cell(row=r, column=col_start,
+                            value=(f"{run_total} Runs ({fib_run_total} FIB)   |   {fam} \u2014 {len(subset)} snaps   |   "
+                                   f"{pass_total} Passes ({fib_pass_total} FIB)"))
+        _fbsub.font = Font(name=FN, size=8, italic=True, color=CDG)
+        _fbsub.alignment = Alignment(horizontal="center", vertical="center")
+        ws17.row_dimensions[r].height = 14
+        r += 1
+        hdr(ws17, r, col_start, "FIELD \u2014 RUN", bg="FF8B0000", sz=8, wrap=True)
+        hdr(ws17, r, col_start + 1, "BOUND \u2014 RUN", bg="FF8B0000", sz=8, wrap=True)
+        r += 1
+        for i in range(n_run):
+            ws17.row_dimensions[r].height = run_row_heights[i]
+            bg = CL if i % 2 == 0 else CW
+            if i < len(run_field):
+                sc(ws17, r, col_start, run_field[i][0], bold=True, sz=8, fc=run_field[i][1], bg=bg, h="left", wrap=True)
+            else:
+                sc(ws17, r, col_start, "\u2014" if i == 0 else "", sz=8, bg=bg, h="left")
+            if i < len(run_bound):
+                sc(ws17, r, col_start + 1, run_bound[i][0], bold=True, sz=8, fc=run_bound[i][1], bg=bg, h="left", wrap=True)
+            else:
+                sc(ws17, r, col_start + 1, "\u2014" if i == 0 else "", sz=8, bg=bg, h="left")
+            r += 1
+        ol_row = r
+        ws17.row_dimensions[ol_row].height = 76
+        ws17.merge_cells(start_row=ol_row, start_column=col_start, end_row=ol_row, end_column=col_start + 1)
+        ol_img = XLImage(_ol_diagram_stream())
+        img_w, img_h = 150, 52
+        ol_img.width, ol_img.height = img_w, img_h
+        lane_px = (22 * 7 + 5) * 2
+        x_offset = max(0, (lane_px - img_w) // 2)
+        row_h_px = int(76 * 96 / 72)
+        y_offset = max(0, (row_h_px - img_h) // 2)
+        marker = AnchorMarker(col=col_start - 1, colOff=pixels_to_EMU(x_offset), row=ol_row - 1, rowOff=pixels_to_EMU(y_offset))
+        ol_img.anchor = OneCellAnchor(_from=marker, ext=XDRPositiveSize2D(pixels_to_EMU(img_w), pixels_to_EMU(img_h)))
+        ws17.add_image(ol_img)
+        r += 1
+        hdr(ws17, r, col_start, "FIELD \u2014 PASS", bg="FF00008B", sz=8, wrap=True)
+        hdr(ws17, r, col_start + 1, "BOUND \u2014 PASS", bg="FF00008B", sz=8, wrap=True)
+        r += 1
+        for i in range(n_pass):
+            ws17.row_dimensions[r].height = pass_row_heights[i]
+            bg = CL if i % 2 == 0 else CW
+            if i < len(pass_field):
+                sc(ws17, r, col_start, pass_field[i][0], bold=True, sz=8, fc=pass_field[i][1], bg=bg, h="left", wrap=True)
+            else:
+                sc(ws17, r, col_start, "\u2014" if i == 0 else "", sz=8, bg=bg, h="left")
+            if i < len(pass_bound):
+                sc(ws17, r, col_start + 1, pass_bound[i][0], bold=True, sz=8, fc=pass_bound[i][1], bg=bg, h="left", wrap=True)
+            else:
+                sc(ws17, r, col_start + 1, "\u2014" if i == 0 else "", sz=8, bg=bg, h="left")
+            r += 1
+        return r
+
+    fam_groups = {}
+    for p in plays:
+        fam = str(p.get('form_family', '')).strip()
+        if fam in ('', 'nan', 'None'): continue
+        fam_groups.setdefault(fam, []).append(p)
+    fam_ranked = sorted(fam_groups.items(), key=lambda kv: -len(kv[1]))
+
+    fam_sections = []
+    for fam, fam_plays in fam_ranked:
+        form_groups = {}
+        for p in fam_plays:
+            f = str(p.get('form', '')).strip()
+            if f in ('', 'nan', 'None'): continue
+            form_groups.setdefault(f, []).append(p)
+        form_ranked = sorted(form_groups.items(), key=lambda kv: -len(kv[1]))
+        if form_ranked:
+            fam_sections.append((fam, form_ranked))
+
+    row = 1
+    any_written = bool(fam_sections)
+    for fam_idx, (fam, form_ranked) in enumerate(fam_sections):
+        ws17.merge_cells(start_row=row, start_column=1, end_row=row, end_column=8)
+        _fam_title = ws17.cell(row=row, column=1, value=f"{fam} FORMATIONS")
+        _fam_title.font = Font(name=FN, bold=True, size=22, color=CW)
+        _fam_title.fill = fil("FFD2011A")
+        _fam_title.alignment = Alignment(horizontal="center", vertical="center")
+        ws17.row_dimensions[row].height = 40
+        row += 2
+
+        row_band_count = 0
+        total_chunks = (len(form_ranked) + 2) // 3
+        for chunk_idx, i in enumerate(range(0, len(form_ranked), 3)):
+            chunk = form_ranked[i:i + 3]
+            chunk_lines = []
+            for form_name, subset in chunk:
+                rf = _fb_quadrant_lines(subset, 'Run', 'F') + _fb_untagged_lines(subset, 'Run')
+                rb = _fb_quadrant_lines(subset, 'Run', 'B')
+                pf = _fb_quadrant_lines(subset, 'Pass', 'F') + _fb_untagged_lines(subset, 'Pass')
+                pb = _fb_quadrant_lines(subset, 'Pass', 'B')
+                chunk_lines.append((rf, rb, pf, pb))
+            n_run = max(max(len(rf), len(rb), 1) for rf, rb, pf, pb in chunk_lines)
+            n_pass = max(max(len(pf), len(pb), 1) for rf, rb, pf, pb in chunk_lines)
+            run_row_heights = []
+            for ri in range(n_run):
+                texts = []
+                for rf, rb, pf, pb in chunk_lines:
+                    if ri < len(rf): texts.append(rf[ri][0])
+                    if ri < len(rb): texts.append(rb[ri][0])
+                run_row_heights.append(_needed_row_height(texts))
+            pass_row_heights = []
+            for ri in range(n_pass):
+                texts = []
+                for rf, rb, pf, pb in chunk_lines:
+                    if ri < len(pf): texts.append(pf[ri][0])
+                    if ri < len(pb): texts.append(pb[ri][0])
+                pass_row_heights.append(_needed_row_height(texts))
+            end_rows = []
+            for lane_idx, (form_name, subset) in enumerate(chunk):
+                rf, rb, pf, pb = chunk_lines[lane_idx]
+                end_rows.append(_draw_formation_block(LANE_STARTS[lane_idx], row, fam, form_name, subset,
+                                                       rf, rb, pf, pb, n_run, n_pass, run_row_heights, pass_row_heights))
+            row = max(end_rows) + 2
+            row_band_count += 1
+            if row_band_count % 2 == 0 and chunk_idx + 1 < total_chunks:
+                ws17.row_breaks.append(Break(id=row - 1))
+
+        if fam_idx + 1 < len(fam_sections):
+            ws17.row_breaks.append(Break(id=row - 1))
+
+    if not any_written:
+        ws17.cell(row=1, column=1, value="Not enough tagged formation data to build formation breakdowns.").font = \
+            Font(name=FN, sz=11, italic=True, color=CDG)
+
+    ws17.cell(row=row + 1, column=1, value="Red = ran while FIB'd").font = Font(name=FN, italic=True, size=9, color=RED_TXT)
+    ws17.cell(row=row + 2, column=1, value="Green = not FIB'd").font = Font(name=FN, italic=True, size=9, color=GREEN_TXT)
+    print_friendly(ws17, repeat_rows=None, one_page=False)
 
     # ── Cover Tab (inserted first) ─────────────────────────────
     ws_cov = wb2.create_sheet("0. Cover", 0)
