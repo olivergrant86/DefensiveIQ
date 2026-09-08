@@ -3590,10 +3590,10 @@ def build_excel(plays, opp, week, date):
             lines.append((label, RED_TXT if is_fib else GREEN_TXT))
         return lines
 
-    def _fb_banner(r, col_start, txt, bg=CB, sz=13, ht=22):
+    def _fb_banner(r, col_start, form_name, bg=CB, sz=15, ht=22):
         ws17.merge_cells(start_row=r, start_column=col_start, end_row=r, end_column=col_start + 1)
-        c = ws17.cell(row=r, column=col_start, value=txt)
-        c.font = Font(name=FN, bold=True, size=sz, color=CW)
+        c = ws17.cell(row=r, column=col_start, value=form_name)
+        c.font = Font(name=FN, bold=True, size=sz, color="FFD2011A")
         c.fill = fil(bg)
         c.alignment = Alignment(horizontal="center", vertical="center")
         ws17.row_dimensions[r].height = ht
@@ -3604,11 +3604,12 @@ def build_excel(plays, opp, week, date):
         pass_total = len([p for p in subset if p['rp'] == 'Pass'])
         fib_run_total = len([p for p in subset if p['rp'] == 'Run' and _is_fib(p['fib'])])
         fib_pass_total = len([p for p in subset if p['rp'] == 'Pass' and _is_fib(p['fib'])])
-        _fb_banner(r, col_start, f"{run_total} RUNS \u2014 {form_name} \u2014 {pass_total} PASSES", bg=CB, sz=9, ht=18)
+        _fb_banner(r, col_start, form_name, bg=CB, sz=15, ht=22)
         r += 1
         ws17.merge_cells(start_row=r, start_column=col_start, end_row=r, end_column=col_start + 1)
         _fbsub = ws17.cell(row=r, column=col_start,
-                            value=f"{fib_run_total} FIB Runs   |   {fam} \u2014 {len(subset)} snaps   |   {fib_pass_total} FIB Passes")
+                            value=(f"{run_total} Runs ({fib_run_total} FIB)   |   {fam} \u2014 {len(subset)} snaps   |   "
+                                   f"{pass_total} Passes ({fib_pass_total} FIB)"))
         _fbsub.font = Font(name=FN, size=8, italic=True, color=CDG)
         _fbsub.alignment = Alignment(horizontal="center", vertical="center")
         ws17.row_dimensions[r].height = 14
