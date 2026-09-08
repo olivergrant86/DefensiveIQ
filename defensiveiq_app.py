@@ -1591,6 +1591,7 @@ COLUMN_ALIASES = {
     "BACK DEPTH":  ["BACK DEPTH", "BACKDEPTH", "DEPTH"],
     "OPEN/CLOSE":  ["OPEN/CLOSE", "OPEN/CLOSED", "OPEN CLOSE", "OPENCLOSE"],
     "FIELD/BOUNDARY": ["FIELD/BOUNDARY", "FIELD/BOUND", "FIELD BOUNDARY", "F/B"],
+    "ST/WK": ["ST/ WK", "ST/WK", "STRONG/WEAK", "ST WK", "STWK"],
     "PLAY #":      ["PLAY #", "PLAY NUM", "PLAY NUMBER", "PLAYNUM", "PLAY NO"],
 }
 
@@ -1762,6 +1763,7 @@ def load_plays(df):
             'back_depth': str(row.get('BACK DEPTH', '')).strip(),
             'open_close': str(row.get('OPEN/CLOSE', '')).strip(),
             'field_boundary': str(row.get('FIELD/BOUNDARY', '')).strip().upper()[:1],
+            'strong_weak': str(row.get('ST/WK', '')).strip().upper(),
             'play_num': row.get('PLAY #', ''),
         })
     return plays
@@ -3588,7 +3590,7 @@ def build_excel(plays, opp, week, date):
     def _fb_quadrant_lines(subset, rp_filter, side):
         """Group by (concept, fib-status) so a play split between FIB'd and
         non-FIB'd snaps shows as two separately-colored lines, not one."""
-        filtered = [p for p in subset if p['rp'] == rp_filter and p['field_boundary'] == side]
+        filtered = [p for p in subset if p['rp'] == rp_filter and p['strong_weak'] == side]
         groups = Counter()
         for p in filtered:
             concept = str(p['concept']).strip()
@@ -3601,10 +3603,10 @@ def build_excel(plays, opp, week, date):
         return lines
 
     def _fb_untagged_lines(subset, rp_filter):
-        """Plays whose FIELD/BOUNDARY tag was neither F nor B (e.g. 'N' or
-        blank) — shown in the Field column so the count always matches the
+        """Plays whose ST/WK tag was neither ST nor WK (e.g. blank) —
+        shown in the Strong column so the count always matches the
         formation total, clearly labeled so it's obvious why."""
-        filtered = [p for p in subset if p['rp'] == rp_filter and p['field_boundary'] not in ('F', 'B')]
+        filtered = [p for p in subset if p['rp'] == rp_filter and p['strong_weak'] not in ('ST', 'WK')]
         groups = Counter()
         for p in filtered:
             concept = str(p['concept']).strip()
@@ -3612,7 +3614,7 @@ def build_excel(plays, opp, week, date):
             groups[(concept, _is_fib(p['fib']))] += 1
         lines = []
         for (concept, is_fib), cnt in sorted(groups.items(), key=lambda kv: -kv[1]):
-            label = (f"{concept} ({cnt}) (F/B Not tagged)" if cnt > 1 else f"{concept} (F/B Not tagged)")
+            label = (f"{concept} ({cnt}) (ST/WK Not tagged)" if cnt > 1 else f"{concept} (ST/WK Not tagged)")
             lines.append((label, RED_TXT if is_fib else GREEN_TXT))
         return lines
 
@@ -3640,8 +3642,8 @@ def build_excel(plays, opp, week, date):
         _fbsub.alignment = Alignment(horizontal="center", vertical="center")
         ws17.row_dimensions[r].height = 14
         r += 1
-        hdr(ws17, r, col_start, "FIELD \u2014 RUN", bg="FF8B0000", sz=8, wrap=True)
-        hdr(ws17, r, col_start + 1, "BOUND \u2014 RUN", bg="FF8B0000", sz=8, wrap=True)
+        hdr(ws17, r, col_start, "STRONG \u2014 RUN", bg="FF8B0000", sz=8, wrap=True)
+        hdr(ws17, r, col_start + 1, "WEAK \u2014 RUN", bg="FF8B0000", sz=8, wrap=True)
         ws17.row_dimensions[r].height = 16
         r += 1
         for i in range(n_run):
@@ -3670,8 +3672,8 @@ def build_excel(plays, opp, week, date):
         ol_img.anchor = OneCellAnchor(_from=marker, ext=XDRPositiveSize2D(pixels_to_EMU(img_w), pixels_to_EMU(img_h)))
         ws17.add_image(ol_img)
         r += 1
-        hdr(ws17, r, col_start, "FIELD \u2014 PASS", bg="FF00008B", sz=8, wrap=True)
-        hdr(ws17, r, col_start + 1, "BOUND \u2014 PASS", bg="FF00008B", sz=8, wrap=True)
+        hdr(ws17, r, col_start, "STRONG \u2014 PASS", bg="FF00008B", sz=8, wrap=True)
+        hdr(ws17, r, col_start + 1, "WEAK \u2014 PASS", bg="FF00008B", sz=8, wrap=True)
         ws17.row_dimensions[r].height = 16
         r += 1
         for i in range(n_pass):
@@ -3722,10 +3724,10 @@ def build_excel(plays, opp, week, date):
             chunk = form_ranked[i:i + 3]
             probe_lines = []
             for form_name, subset in chunk:
-                rf = _fb_quadrant_lines(subset, 'Run', 'F') + _fb_untagged_lines(subset, 'Run')
-                rb = _fb_quadrant_lines(subset, 'Run', 'B')
-                pf = _fb_quadrant_lines(subset, 'Pass', 'F') + _fb_untagged_lines(subset, 'Pass')
-                pb = _fb_quadrant_lines(subset, 'Pass', 'B')
+                rf = _fb_quadrant_lines(subset, 'Run', 'ST') + _fb_untagged_lines(subset, 'Run')
+                rb = _fb_quadrant_lines(subset, 'Run', 'WK')
+                pf = _fb_quadrant_lines(subset, 'Pass', 'ST') + _fb_untagged_lines(subset, 'Pass')
+                pb = _fb_quadrant_lines(subset, 'Pass', 'WK')
                 probe_lines.append((rf, rb, pf, pb))
             n_run_p = max(max(len(rf), len(rb), 1) for rf, rb, pf, pb in probe_lines)
             n_pass_p = max(max(len(pf), len(pb), 1) for rf, rb, pf, pb in probe_lines)
@@ -3764,10 +3766,10 @@ def build_excel(plays, opp, week, date):
             chunk = form_ranked[i:i + 3]
             chunk_lines = []
             for form_name, subset in chunk:
-                rf = _fb_quadrant_lines(subset, 'Run', 'F') + _fb_untagged_lines(subset, 'Run')
-                rb = _fb_quadrant_lines(subset, 'Run', 'B')
-                pf = _fb_quadrant_lines(subset, 'Pass', 'F') + _fb_untagged_lines(subset, 'Pass')
-                pb = _fb_quadrant_lines(subset, 'Pass', 'B')
+                rf = _fb_quadrant_lines(subset, 'Run', 'ST') + _fb_untagged_lines(subset, 'Run')
+                rb = _fb_quadrant_lines(subset, 'Run', 'WK')
+                pf = _fb_quadrant_lines(subset, 'Pass', 'ST') + _fb_untagged_lines(subset, 'Pass')
+                pb = _fb_quadrant_lines(subset, 'Pass', 'WK')
                 chunk_lines.append((rf, rb, pf, pb))
             n_run = max(max(len(rf), len(rb), 1) for rf, rb, pf, pb in chunk_lines)
             n_pass = max(max(len(pf), len(pb), 1) for rf, rb, pf, pb in chunk_lines)
