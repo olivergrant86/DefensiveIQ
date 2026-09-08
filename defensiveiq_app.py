@@ -1,6 +1,7 @@
 import streamlit as st
 import os
 import io
+import math
 import base64
 import pandas as pd
 from collections import Counter
@@ -3563,6 +3564,17 @@ def build_excel(plays, opp, week, date):
     GREEN_TXT = "FF1E8449"; RED_TXT = "FFD2011A"
     LANE_STARTS = [1, 4, 7]
 
+    def _needed_row_height(texts, col_chars=22, base_pt=16, line_pt=13):
+        """So a long play name that wraps to 2-3 lines gets a tall enough
+        row instead of being squeezed into a single fixed-height line."""
+        max_lines = 1
+        for t in texts:
+            if not t or t == "\u2014":
+                continue
+            lines = max(1, math.ceil(len(t) / col_chars))
+            max_lines = max(max_lines, lines)
+        return max(base_pt, max_lines * line_pt + 4)
+
     def _fb_quadrant_lines(subset, rp_filter, side):
         """Group by (concept, fib-status) so a play split between FIB'd and
         non-FIB'd snaps shows as two separately-colored lines, not one."""
@@ -3586,7 +3598,7 @@ def build_excel(plays, opp, week, date):
         c.alignment = Alignment(horizontal="center", vertical="center")
         ws17.row_dimensions[r].height = ht
 
-    def _draw_formation_block(col_start, row_start, fam, form_name, subset, run_field, run_bound, pass_field, pass_bound, n_run, n_pass):
+    def _draw_formation_block(col_start, row_start, fam, form_name, subset, run_field, run_bound, pass_field, pass_bound, n_run, n_pass, run_row_heights, pass_row_heights):
         r = row_start
         _fb_banner(r, col_start, form_name, bg=CB, sz=12, ht=20)
         r += 1
@@ -3600,7 +3612,7 @@ def build_excel(plays, opp, week, date):
         hdr(ws17, r, col_start + 1, "BOUND \u2014 RUN", bg="FF8B0000", sz=8, wrap=True)
         r += 1
         for i in range(n_run):
-            ws17.row_dimensions[r].height = 16
+            ws17.row_dimensions[r].height = run_row_heights[i]
             bg = CL if i % 2 == 0 else CW
             if i < len(run_field):
                 sc(ws17, r, col_start, run_field[i][0], bold=True, sz=8, fc=run_field[i][1], bg=bg, h="left", wrap=True)
@@ -3629,7 +3641,7 @@ def build_excel(plays, opp, week, date):
         hdr(ws17, r, col_start + 1, "BOUND \u2014 PASS", bg="FF00008B", sz=8, wrap=True)
         r += 1
         for i in range(n_pass):
-            ws17.row_dimensions[r].height = 16
+            ws17.row_dimensions[r].height = pass_row_heights[i]
             bg = CL if i % 2 == 0 else CW
             if i < len(pass_field):
                 sc(ws17, r, col_start, pass_field[i][0], bold=True, sz=8, fc=pass_field[i][1], bg=bg, h="left", wrap=True)
@@ -3684,11 +3696,25 @@ def build_excel(plays, opp, week, date):
                 chunk_lines.append((rf, rb, pf, pb))
             n_run = max(max(len(rf), len(rb), 1) for rf, rb, pf, pb in chunk_lines)
             n_pass = max(max(len(pf), len(pb), 1) for rf, rb, pf, pb in chunk_lines)
+            run_row_heights = []
+            for ri in range(n_run):
+                texts = []
+                for rf, rb, pf, pb in chunk_lines:
+                    if ri < len(rf): texts.append(rf[ri][0])
+                    if ri < len(rb): texts.append(rb[ri][0])
+                run_row_heights.append(_needed_row_height(texts))
+            pass_row_heights = []
+            for ri in range(n_pass):
+                texts = []
+                for rf, rb, pf, pb in chunk_lines:
+                    if ri < len(pf): texts.append(pf[ri][0])
+                    if ri < len(pb): texts.append(pb[ri][0])
+                pass_row_heights.append(_needed_row_height(texts))
             end_rows = []
             for lane_idx, (form_name, subset) in enumerate(chunk):
                 rf, rb, pf, pb = chunk_lines[lane_idx]
                 end_rows.append(_draw_formation_block(LANE_STARTS[lane_idx], row, fam, form_name, subset,
-                                                       rf, rb, pf, pb, n_run, n_pass))
+                                                       rf, rb, pf, pb, n_run, n_pass, run_row_heights, pass_row_heights))
             row = max(end_rows) + 2
             row_band_count += 1
             if row_band_count % 2 == 0 and chunk_idx + 1 < total_chunks:
