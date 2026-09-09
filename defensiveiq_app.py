@@ -3503,6 +3503,32 @@ def build_excel(plays, opp, week, date):
                 script.append(pass_script[i_p]); i_p += 1
         return _limit_consecutive_formations(script, max_consecutive=2)
 
+    def _build_script_by_down_order(down_plays, total_reps):
+        """Same run/pass-matched, formation-capped selection as _build_script,
+        but grouped into a realistic drive order -- all 1st down reps first,
+        then 2nd, then 3rd, then 4th -- instead of randomly interleaved."""
+        dn_counts = Counter(p['dn'] for p in down_plays if p['dn'] in (1, 2, 3, 4))
+        dn_total = sum(dn_counts.values())
+        if dn_total == 0:
+            return []
+        dn_ranked = sorted(dn_counts.items())
+        raw = [(dn, total_reps * cnt / dn_total) for dn, cnt in dn_ranked]
+        alloc = {dn: int(x) for dn, x in raw}
+        remainder = total_reps - sum(alloc.values())
+        fracs = sorted(raw, key=lambda t: -(t[1] - int(t[1])))
+        i = 0
+        while remainder > 0 and fracs:
+            alloc[fracs[i % len(fracs)][0]] += 1
+            remainder -= 1
+            i += 1
+        full_script = []
+        for dn, _cnt in dn_ranked:
+            n_for_dn = alloc.get(dn, 0)
+            if n_for_dn <= 0: continue
+            dn_plays = [p for p in down_plays if p['dn'] == dn]
+            full_script.extend(_build_script(dn_plays, n_for_dn))
+        return full_script
+
     def _write_script_rows(ws, start_row, script):
         r = start_row
         for i, p in enumerate(script, 1):
@@ -3649,6 +3675,61 @@ def build_excel(plays, opp, week, date):
 
     row += 2
 
+    # ── Red Zone / Goal Line ──
+    banner(ws16, row, "RED ZONE / GOAL LINE PRACTICE SCRIPT", NC16, bg=CB, sz=13, ht=26)
+    row += 1
+    ws16.merge_cells(start_row=row, start_column=1, end_row=row, end_column=NC16)
+    _rz_sub = ws16.cell(row=row, column=1,
+                         value="Weighted by scoring-area situation \u2014 run/pass split matched per bucket")
+    _rz_sub.font = Font(name=FN, size=9, italic=True, color=CDG)
+    _rz_sub.alignment = Alignment(horizontal="center", vertical="center")
+    ws16.row_dimensions[row].height = 16
+    row += 1
+    for c, txt, bg in [(1, "REP #", CTe), (2, "TYPE", CTe), (3, "DOWN", CTe), (4, "DIST", CTe),
+                       (5, "PLAY", CTe), (6, "FORMATION", CTe), (7, "HASH", CTe), (8, "PLAY #", CTe), (9, "NOTES", CTe)]:
+        hdr(ws16, row, c, txt, bg=bg, sz=9)
+    row += 1
+    rz_buckets = [
+        ("RED ZONE (OPP 20-11)", lambda p: p['zone'] == 'RZ', 12),
+        ("GOAL LINE (OPP 10 & IN)", lambda p: p['zone'] == 'GL', 8),
+    ]
+    rz_rep_counter = 0
+    for label, fn, n_reps in rz_buckets:
+        bucket_plays = [p for p in plays if fn(p)]
+        ws16.merge_cells(start_row=row, start_column=1, end_row=row, end_column=NC16)
+        _lbl = ws16.cell(row=row, column=1, value=f"  {label}  ({len(bucket_plays)} snaps tagged, {n_reps} reps)")
+        _lbl.font = Font(name=FN, bold=True, size=9, color=CW)
+        _lbl.fill = fil("FF4A235A")
+        _lbl.alignment = Alignment(horizontal="left", vertical="center")
+        ws16.row_dimensions[row].height = 18
+        row += 1
+        bucket_script = _build_script(bucket_plays, n_reps)
+        if not bucket_script:
+            ws16.merge_cells(start_row=row, start_column=1, end_row=row, end_column=NC16)
+            c = ws16.cell(row=row, column=1, value="Not enough tagged data for this situation.")
+            c.font = Font(name=FN, sz=9, italic=True, color=CDG); c.alignment = Alignment(horizontal="center")
+            row += 1
+            continue
+        for p in bucket_script:
+            rz_rep_counter += 1
+            i = rz_rep_counter
+            bg = CL if i % 2 == 0 else CW
+            play_type = p['rp']
+            type_color = "FF8B0000" if play_type == "Run" else "FF00008B"
+            type_bg = CRB if play_type == "Run" else CPB
+            sc(ws16, row, 1, i, bold=True, sz=9, fc="FF000000", bg=bg, fmt="0")
+            sc(ws16, row, 2, play_type, bold=True, sz=9, fc=type_color, bg=type_bg)
+            sc(ws16, row, 3, _DN_ORD.get(p['dn'], str(p['dn'])), sz=9, bg=bg)
+            sc(ws16, row, 4, p['dist'], sz=9, bg=bg, fmt="0")
+            sc(ws16, row, 5, p['concept'], bold=True, sz=9, fc="FF000000", bg=bg, h="left")
+            sc(ws16, row, 6, p['form'], sz=9, bg=bg, h="left")
+            sc(ws16, row, 7, p['hash'] or "\u2014", sz=9, bg=bg)
+            sc(ws16, row, 8, _play_num(p.get('play_num', '')), sz=9, bg=bg)
+            sc(ws16, row, 9, "", sz=9, bg=CYB)
+            row += 1
+
+    row += 2
+
     # ── Thursday Script (game simulation mix of all downs) ──
     banner(ws16, row, "THURSDAY SCRIPT", NC16, bg=CB, sz=13, ht=26)
     row += 1
@@ -3658,7 +3739,7 @@ def build_excel(plays, opp, week, date):
     dn_summary = " / ".join(f"{_DN_ORD.get(dn, dn)} {round(cnt/dn_total*100)}%"
                              for dn, cnt in sorted(dn_counts.items())) if dn_total else "no downs tagged"
     _thu_sub = ws16.cell(row=row, column=1,
-                          value=f"Game-simulation mix, matched to their real down distribution \u2014 {dn_summary}")
+                          value=f"1st down \u2192 2nd \u2192 3rd \u2192 4th, matched to their real down distribution \u2014 {dn_summary}")
     _thu_sub.font = Font(name=FN, size=9, italic=True, color=CDG)
     _thu_sub.alignment = Alignment(horizontal="center", vertical="center")
     ws16.row_dimensions[row].height = 16
@@ -3668,7 +3749,7 @@ def build_excel(plays, opp, week, date):
         hdr(ws16, row, c, txt, bg=bg, sz=9)
     row += 1
     all_down_plays = [p for p in plays if p['dn'] in (1, 2, 3, 4)]
-    thursday_script = _build_script(all_down_plays, 20)
+    thursday_script = _build_script_by_down_order(all_down_plays, 20)
     if not thursday_script:
         ws16.merge_cells(start_row=row, start_column=1, end_row=row, end_column=NC16)
         c = ws16.cell(row=row, column=1, value="Not enough tagged data to build this script.")
