@@ -3503,31 +3503,45 @@ def build_excel(plays, opp, week, date):
                 script.append(pass_script[i_p]); i_p += 1
         return _limit_consecutive_formations(script, max_consecutive=2)
 
-    def _build_script_by_down_order(down_plays, total_reps):
-        """Same run/pass-matched, formation-capped selection as _build_script,
-        but grouped into a realistic drive order -- all 1st down reps first,
-        then 2nd, then 3rd, then 4th -- instead of randomly interleaved."""
-        dn_counts = Counter(p['dn'] for p in down_plays if p['dn'] in (1, 2, 3, 4))
-        dn_total = sum(dn_counts.values())
-        if dn_total == 0:
-            return []
-        dn_ranked = sorted(dn_counts.items())
-        raw = [(dn, total_reps * cnt / dn_total) for dn, cnt in dn_ranked]
-        alloc = {dn: int(x) for dn, x in raw}
-        remainder = total_reps - sum(alloc.values())
-        fracs = sorted(raw, key=lambda t: -(t[1] - int(t[1])))
-        i = 0
-        while remainder > 0 and fracs:
-            alloc[fracs[i % len(fracs)][0]] += 1
-            remainder -= 1
-            i += 1
-        full_script = []
-        for dn, _cnt in dn_ranked:
-            n_for_dn = alloc.get(dn, 0)
-            if n_for_dn <= 0: continue
-            dn_plays = [p for p in down_plays if p['dn'] == dn]
-            full_script.extend(_build_script(dn_plays, n_for_dn))
-        return full_script
+    def _build_thursday_script(down_plays, total_reps=20, n_fourth=2):
+        """A realistic drive-simulation order: 1st down, 2nd down, 3rd down,
+        repeating like real series would, with a couple 4th down decision
+        points sprinkled in -- not four separate down-blocks."""
+        plays_1 = [p for p in down_plays if p['dn'] == 1]
+        plays_2 = [p for p in down_plays if p['dn'] == 2]
+        plays_3 = [p for p in down_plays if p['dn'] == 3]
+        plays_4 = [p for p in down_plays if p['dn'] == 4]
+        n_fourth = min(n_fourth, total_reps) if plays_4 else 0
+        remaining = max(0, total_reps - n_fourth)
+        n_per = remaining // 3
+        leftover = remaining - n_per * 3
+        n1 = n_per + (1 if leftover > 0 else 0)
+        n2 = n_per + (1 if leftover > 1 else 0)
+        n3 = n_per
+        script_1 = _build_script(plays_1, n1)
+        script_2 = _build_script(plays_2, n2)
+        script_3 = _build_script(plays_3, n3)
+        script_4 = _build_script(plays_4, n_fourth) if n_fourth else []
+        n_cycles = min(len(script_1), len(script_2), len(script_3))
+        fourth_insert_after = set()
+        if script_4 and n_cycles:
+            step = max(1, n_cycles // (len(script_4) + 1))
+            for k in range(len(script_4)):
+                fourth_insert_after.add(min(n_cycles, (k + 1) * step))
+        combined = []
+        fi = 0
+        for cyc in range(1, n_cycles + 1):
+            combined.append(script_1[cyc - 1])
+            combined.append(script_2[cyc - 1])
+            combined.append(script_3[cyc - 1])
+            if cyc in fourth_insert_after and fi < len(script_4):
+                combined.append(script_4[fi]); fi += 1
+        while fi < len(script_4):
+            combined.append(script_4[fi]); fi += 1
+        for extra in (script_1, script_2, script_3):
+            if len(extra) > n_cycles:
+                combined.extend(extra[n_cycles:])
+        return combined
 
     def _write_script_rows(ws, start_row, script):
         r = start_row
@@ -3739,7 +3753,7 @@ def build_excel(plays, opp, week, date):
     dn_summary = " / ".join(f"{_DN_ORD.get(dn, dn)} {round(cnt/dn_total*100)}%"
                              for dn, cnt in sorted(dn_counts.items())) if dn_total else "no downs tagged"
     _thu_sub = ws16.cell(row=row, column=1,
-                          value=f"1st down \u2192 2nd \u2192 3rd \u2192 4th, matched to their real down distribution \u2014 {dn_summary}")
+                          value=f"Drive simulation \u2014 1st \u2192 2nd \u2192 3rd, repeating, with 4th down decision points mixed in \u2014 {dn_summary}")
     _thu_sub.font = Font(name=FN, size=9, italic=True, color=CDG)
     _thu_sub.alignment = Alignment(horizontal="center", vertical="center")
     ws16.row_dimensions[row].height = 16
@@ -3749,7 +3763,7 @@ def build_excel(plays, opp, week, date):
         hdr(ws16, row, c, txt, bg=bg, sz=9)
     row += 1
     all_down_plays = [p for p in plays if p['dn'] in (1, 2, 3, 4)]
-    thursday_script = _build_script_by_down_order(all_down_plays, 20)
+    thursday_script = _build_thursday_script(all_down_plays, 20, n_fourth=2)
     if not thursday_script:
         ws16.merge_cells(start_row=row, start_column=1, end_row=row, end_column=NC16)
         c = ws16.cell(row=row, column=1, value="Not enough tagged data to build this script.")
