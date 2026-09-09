@@ -13,6 +13,8 @@ from openpyxl.drawing.spreadsheet_drawing import OneCellAnchor, AnchorMarker
 from openpyxl.drawing.xdr import XDRPositiveSize2D
 from openpyxl.utils.units import pixels_to_EMU
 from openpyxl.worksheet.pagebreak import Break
+from openpyxl.cell.rich_text import CellRichText, TextBlock
+from openpyxl.cell.text import InlineFont
 from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
@@ -1591,6 +1593,7 @@ COLUMN_ALIASES = {
     "BACK DEPTH":  ["BACK DEPTH", "BACKDEPTH", "DEPTH"],
     "OPEN/CLOSE":  ["OPEN/CLOSE", "OPEN/CLOSED", "OPEN CLOSE", "OPENCLOSE"],
     "FIELD/BOUNDARY": ["FIELD/BOUNDARY", "FIELD/BOUND", "FIELD BOUNDARY", "F/B"],
+    "ST/WK": ["ST/ WK", "ST/WK", "STRONG/WEAK", "ST WK", "STWK"],
     "PLAY #":      ["PLAY #", "PLAY NUM", "PLAY NUMBER", "PLAYNUM", "PLAY NO"],
 }
 
@@ -1762,6 +1765,7 @@ def load_plays(df):
             'back_depth': str(row.get('BACK DEPTH', '')).strip(),
             'open_close': str(row.get('OPEN/CLOSE', '')).strip(),
             'field_boundary': str(row.get('FIELD/BOUNDARY', '')).strip().upper()[:1],
+            'strong_weak': str(row.get('ST/WK', '')).strip().upper(),
             'play_num': row.get('PLAY #', ''),
         })
     return plays
@@ -3398,10 +3402,14 @@ def build_excel(plays, opp, week, date):
     widths(ws16, [8, 8, 8, 10, 22, 24, 8, 10, 30])
     _DN_ORD = {1: "1st", 2: "2nd", 3: "3rd", 4: "4th"}
 
-    def _select_real_plays(group_plays, n_slots):
+    def _select_real_plays(group_plays, n_slots, max_per_formation=None):
         """Pick actual logged plays (not aggregates) for n_slots reps,
-        proportional to how often each concept is really called, preferring
-        the instance(s) tagged with that concept's most common formation."""
+        proportional to how often each concept is really called. Prefers
+        the formation(s) that concept is actually run from most, but if
+        max_per_formation is set, no single (play, formation) combo shows
+        up more than that many times — once a formation hits the cap for
+        a given play, the next most common formation for that same play
+        fills the remaining slots instead of repeating the same look."""
         if not group_plays or n_slots <= 0:
             return []
         cc = Counter(str(p['concept']) for p in group_plays if str(p['concept']).strip() not in ('', 'nan', 'None'))
@@ -3423,16 +3431,53 @@ def build_excel(plays, opp, week, date):
             cnt = alloc.get(concept, 0)
             if cnt <= 0: continue
             concept_plays = [p for p in group_plays if str(p['concept']) == concept]
-            fc2 = Counter(str(p['form']) for p in concept_plays if str(p['form']).strip() not in ('', 'nan', 'None'))
-            top_form = fc2.most_common(1)[0][0] if fc2 else None
-            preferred = [p for p in concept_plays if str(p['form']) == top_form] if top_form else []
-            others = [p for p in concept_plays if p not in preferred]
-            pool = preferred + others
-            chosen = list(pool[:cnt])
-            while len(chosen) < cnt and pool:
-                chosen.append(pool[len(chosen) % len(pool)])
+            if max_per_formation is None:
+                fc2 = Counter(str(p['form']) for p in concept_plays if str(p['form']).strip() not in ('', 'nan', 'None'))
+                top_form = fc2.most_common(1)[0][0] if fc2 else None
+                preferred = [p for p in concept_plays if str(p['form']) == top_form] if top_form else []
+                others = [p for p in concept_plays if p not in preferred]
+                pool = preferred + others
+                chosen = list(pool[:cnt])
+                while len(chosen) < cnt and pool:
+                    chosen.append(pool[len(chosen) % len(pool)])
+            else:
+                form_groups = {}
+                for p in concept_plays:
+                    f = str(p['form']).strip()
+                    form_groups.setdefault(f, []).append(p)
+                form_ranked = sorted(form_groups.items(), key=lambda kv: -len(kv[1]))
+                chosen = []
+                for _form, fplays in form_ranked:
+                    take = min(max_per_formation, len(fplays), cnt - len(chosen))
+                    if take > 0:
+                        chosen.extend(fplays[:take])
+                    if len(chosen) >= cnt:
+                        break
+                if len(chosen) < cnt and concept_plays:
+                    idx = 0
+                    while len(chosen) < cnt:
+                        chosen.append(concept_plays[idx % len(concept_plays)])
+                        idx += 1
             selected.extend(chosen[:cnt])
         return selected
+
+    def _limit_consecutive_formations(script, max_consecutive=2):
+        """No formation shows up 3 reps in a row — swap a later rep in to
+        break up the streak wherever it happens."""
+        script = list(script)
+        n = len(script)
+        for _pass_num in range(5):
+            changed = False
+            for i in range(max_consecutive, n):
+                if all(script[i - k]['form'] == script[i]['form'] for k in range(max_consecutive + 1)):
+                    for j in range(i + 1, n):
+                        if script[j]['form'] != script[i]['form']:
+                            script[i], script[j] = script[j], script[i]
+                            changed = True
+                            break
+            if not changed:
+                break
+        return script
 
     def _build_script(down_plays, total_reps):
         """Real plays, run/pass split matched to their actual tendency,
@@ -3444,8 +3489,8 @@ def build_excel(plays, opp, week, date):
         run_pct = len(runs) / len(down_plays) if down_plays else 0
         n_runs = max(0, min(total_reps, round(total_reps * run_pct)))
         n_passes = total_reps - n_runs
-        run_script = _select_real_plays(runs, n_runs)
-        pass_script = _select_real_plays(passes, n_passes)
+        run_script = _select_real_plays(runs, n_runs, max_per_formation=3)
+        pass_script = _select_real_plays(passes, n_passes, max_per_formation=2)
         script = []
         i_r = i_p = 0
         nr, npass = len(run_script), len(pass_script)
@@ -3456,7 +3501,7 @@ def build_excel(plays, opp, week, date):
                 script.append(run_script[i_r]); i_r += 1
             else:
                 script.append(pass_script[i_p]); i_p += 1
-        return script
+        return _limit_consecutive_formations(script, max_consecutive=2)
 
     def _write_script_rows(ws, start_row, script):
         r = start_row
@@ -3588,7 +3633,7 @@ def build_excel(plays, opp, week, date):
     def _fb_quadrant_lines(subset, rp_filter, side):
         """Group by (concept, fib-status) so a play split between FIB'd and
         non-FIB'd snaps shows as two separately-colored lines, not one."""
-        filtered = [p for p in subset if p['rp'] == rp_filter and p['field_boundary'] == side]
+        filtered = [p for p in subset if p['rp'] == rp_filter and p['strong_weak'] == side]
         groups = Counter()
         for p in filtered:
             concept = str(p['concept']).strip()
@@ -3601,10 +3646,10 @@ def build_excel(plays, opp, week, date):
         return lines
 
     def _fb_untagged_lines(subset, rp_filter):
-        """Plays whose FIELD/BOUNDARY tag was neither F nor B (e.g. 'N' or
-        blank) — shown in the Field column so the count always matches the
+        """Plays whose ST/WK tag was neither ST nor WK (e.g. blank) —
+        shown in the Strong column so the count always matches the
         formation total, clearly labeled so it's obvious why."""
-        filtered = [p for p in subset if p['rp'] == rp_filter and p['field_boundary'] not in ('F', 'B')]
+        filtered = [p for p in subset if p['rp'] == rp_filter and p['strong_weak'] not in ('ST', 'WK')]
         groups = Counter()
         for p in filtered:
             concept = str(p['concept']).strip()
@@ -3612,14 +3657,20 @@ def build_excel(plays, opp, week, date):
             groups[(concept, _is_fib(p['fib']))] += 1
         lines = []
         for (concept, is_fib), cnt in sorted(groups.items(), key=lambda kv: -kv[1]):
-            label = (f"{concept} ({cnt}) (F/B Not tagged)" if cnt > 1 else f"{concept} (F/B Not tagged)")
+            label = (f"{concept} ({cnt}) (ST/WK Not tagged)" if cnt > 1 else f"{concept} (ST/WK Not tagged)")
             lines.append((label, RED_TXT if is_fib else GREEN_TXT))
         return lines
 
-    def _fb_banner(r, col_start, form_name, bg=CB, sz=15, ht=22):
+    def _fb_banner(r, col_start, form_name, run_pass_txt, fb_txt, bg=CB, sz=15, ht=22):
         ws17.merge_cells(start_row=r, start_column=col_start, end_row=r, end_column=col_start + 1)
-        c = ws17.cell(row=r, column=col_start, value=form_name)
-        c.font = Font(name=FN, bold=True, size=sz, color="FFD2011A")
+        small_font = InlineFont(rFont=FN, b=True, sz=8, color=CW)
+        name_font = InlineFont(rFont=FN, b=True, sz=sz, color="FFD2011A")
+        c = ws17.cell(row=r, column=col_start)
+        c.value = CellRichText(
+            TextBlock(small_font, f"{run_pass_txt}   "),
+            TextBlock(name_font, form_name),
+            TextBlock(small_font, f"   {fb_txt}"),
+        )
         c.fill = fil(bg)
         c.alignment = Alignment(horizontal="center", vertical="center")
         ws17.row_dimensions[r].height = ht
@@ -3630,7 +3681,17 @@ def build_excel(plays, opp, week, date):
         pass_total = len([p for p in subset if p['rp'] == 'Pass'])
         fib_run_total = len([p for p in subset if p['rp'] == 'Run' and _is_fib(p['fib'])])
         fib_pass_total = len([p for p in subset if p['rp'] == 'Pass' and _is_fib(p['fib'])])
-        _fb_banner(r, col_start, form_name, bg=CB, sz=15, ht=22)
+        rp_total = run_total + pass_total
+        run_pct = round(run_total / rp_total * 100) if rp_total else 0
+        pass_pct = 100 - run_pct if rp_total else 0
+        field_ct = len([p for p in subset if p['field_boundary'] == 'F'])
+        bound_ct = len([p for p in subset if p['field_boundary'] == 'B'])
+        fb_total = field_ct + bound_ct
+        field_pct = round(field_ct / fb_total * 100) if fb_total else 0
+        bound_pct = 100 - field_pct if fb_total else 0
+        run_pass_txt = f"{run_pct}%R/{pass_pct}%P"
+        fb_txt = f"{field_pct}%F/{bound_pct}%B"
+        _fb_banner(r, col_start, form_name, run_pass_txt, fb_txt, bg=CB, sz=14, ht=22)
         r += 1
         ws17.merge_cells(start_row=r, start_column=col_start, end_row=r, end_column=col_start + 1)
         _fbsub = ws17.cell(row=r, column=col_start,
@@ -3640,8 +3701,8 @@ def build_excel(plays, opp, week, date):
         _fbsub.alignment = Alignment(horizontal="center", vertical="center")
         ws17.row_dimensions[r].height = 14
         r += 1
-        hdr(ws17, r, col_start, "FIELD \u2014 RUN", bg="FF8B0000", sz=8, wrap=True)
-        hdr(ws17, r, col_start + 1, "BOUND \u2014 RUN", bg="FF8B0000", sz=8, wrap=True)
+        hdr(ws17, r, col_start, "STRONG \u2014 RUN", bg="FF8B0000", sz=8, wrap=True)
+        hdr(ws17, r, col_start + 1, "WEAK \u2014 RUN", bg="FF8B0000", sz=8, wrap=True)
         ws17.row_dimensions[r].height = 16
         r += 1
         for i in range(n_run):
@@ -3670,8 +3731,8 @@ def build_excel(plays, opp, week, date):
         ol_img.anchor = OneCellAnchor(_from=marker, ext=XDRPositiveSize2D(pixels_to_EMU(img_w), pixels_to_EMU(img_h)))
         ws17.add_image(ol_img)
         r += 1
-        hdr(ws17, r, col_start, "FIELD \u2014 PASS", bg="FF00008B", sz=8, wrap=True)
-        hdr(ws17, r, col_start + 1, "BOUND \u2014 PASS", bg="FF00008B", sz=8, wrap=True)
+        hdr(ws17, r, col_start, "STRONG \u2014 PASS", bg="FF00008B", sz=8, wrap=True)
+        hdr(ws17, r, col_start + 1, "WEAK \u2014 PASS", bg="FF00008B", sz=8, wrap=True)
         ws17.row_dimensions[r].height = 16
         r += 1
         for i in range(n_pass):
@@ -3722,10 +3783,10 @@ def build_excel(plays, opp, week, date):
             chunk = form_ranked[i:i + 3]
             probe_lines = []
             for form_name, subset in chunk:
-                rf = _fb_quadrant_lines(subset, 'Run', 'F') + _fb_untagged_lines(subset, 'Run')
-                rb = _fb_quadrant_lines(subset, 'Run', 'B')
-                pf = _fb_quadrant_lines(subset, 'Pass', 'F') + _fb_untagged_lines(subset, 'Pass')
-                pb = _fb_quadrant_lines(subset, 'Pass', 'B')
+                rf = _fb_quadrant_lines(subset, 'Run', 'ST') + _fb_untagged_lines(subset, 'Run')
+                rb = _fb_quadrant_lines(subset, 'Run', 'WK')
+                pf = _fb_quadrant_lines(subset, 'Pass', 'ST') + _fb_untagged_lines(subset, 'Pass')
+                pb = _fb_quadrant_lines(subset, 'Pass', 'WK')
                 probe_lines.append((rf, rb, pf, pb))
             n_run_p = max(max(len(rf), len(rb), 1) for rf, rb, pf, pb in probe_lines)
             n_pass_p = max(max(len(pf), len(pb), 1) for rf, rb, pf, pb in probe_lines)
@@ -3764,10 +3825,10 @@ def build_excel(plays, opp, week, date):
             chunk = form_ranked[i:i + 3]
             chunk_lines = []
             for form_name, subset in chunk:
-                rf = _fb_quadrant_lines(subset, 'Run', 'F') + _fb_untagged_lines(subset, 'Run')
-                rb = _fb_quadrant_lines(subset, 'Run', 'B')
-                pf = _fb_quadrant_lines(subset, 'Pass', 'F') + _fb_untagged_lines(subset, 'Pass')
-                pb = _fb_quadrant_lines(subset, 'Pass', 'B')
+                rf = _fb_quadrant_lines(subset, 'Run', 'ST') + _fb_untagged_lines(subset, 'Run')
+                rb = _fb_quadrant_lines(subset, 'Run', 'WK')
+                pf = _fb_quadrant_lines(subset, 'Pass', 'ST') + _fb_untagged_lines(subset, 'Pass')
+                pb = _fb_quadrant_lines(subset, 'Pass', 'WK')
                 chunk_lines.append((rf, rb, pf, pb))
             n_run = max(max(len(rf), len(rb), 1) for rf, rb, pf, pb in chunk_lines)
             n_pass = max(max(len(pf), len(pb), 1) for rf, rb, pf, pb in chunk_lines)
@@ -3785,6 +3846,12 @@ def build_excel(plays, opp, week, date):
                     if ri < len(pf): texts.append(pf[ri][0])
                     if ri < len(pb): texts.append(pb[ri][0])
                 pass_row_heights.append(_needed_row_height(texts))
+            natural_band_height = BAND_FIXED_PT + sum(run_row_heights) + sum(pass_row_heights)
+            deficit = worst_band_height - natural_band_height
+            if deficit > 0 and (n_run + n_pass) > 0:
+                extra_per_row = deficit / (n_run + n_pass)
+                run_row_heights = [h + extra_per_row for h in run_row_heights]
+                pass_row_heights = [h + extra_per_row for h in pass_row_heights]
             end_rows = []
             for lane_idx, (form_name, subset) in enumerate(chunk):
                 rf, rb, pf, pb = chunk_lines[lane_idx]
