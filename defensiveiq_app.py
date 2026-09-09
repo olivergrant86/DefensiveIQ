@@ -3524,6 +3524,43 @@ def build_excel(plays, opp, week, date):
 
     row = 1
 
+    # ── Formation Recognition (all formations, most to least called) ──
+    fr_groups = {}
+    for p in plays:
+        f = str(p.get('form', '')).strip()
+        if f in ('', 'nan', 'None'): continue
+        fr_groups.setdefault(f, []).append(p)
+    fr_ranked = sorted(fr_groups.items(), key=lambda kv: -len(kv[1]))
+    banner(ws16, row, "FORMATION RECOGNITION  \u2014  Every Formation, Most to Least Called", 9, bg=CB, sz=13, ht=26)
+    row += 1
+    for c, txt, bg in [(1, "RANK", CTe), (4, "SNAPS", CTe), (5, "FORMATION", CTe), (6, "FAMILY", CTe),
+                       (7, "RUN%", CTe), (8, "PASS%", CTe)]:
+        hdr(ws16, row, c, txt, bg=bg, sz=9)
+    row += 1
+    if not fr_ranked:
+        ws16.merge_cells(start_row=row, start_column=1, end_row=row, end_column=9)
+        c = ws16.cell(row=row, column=1, value="Not enough formation data tagged.")
+        c.font = Font(name=FN, sz=10, italic=True, color=CDG); c.alignment = Alignment(horizontal="center")
+        row += 1
+    else:
+        for ri, (form_name, subset) in enumerate(fr_ranked):
+            r = row
+            bg = CL if ri % 2 == 0 else CW
+            run_n = len([p for p in subset if p['rp'] == 'Run'])
+            pass_n = len(subset) - run_n
+            fam = Counter(str(p.get('form_family', '')).strip() for p in subset
+                          if str(p.get('form_family', '')).strip() not in ('', 'nan', 'None'))
+            fam_lbl = fam.most_common(1)[0][0] if fam else "\u2014"
+            sc(ws16, r, 1, ri + 1, bold=True, sz=9, fc="FF000000", bg=bg, fmt="0")
+            sc(ws16, r, 4, len(subset), bold=True, sz=9, fc="FF000000", bg=bg, fmt="0")
+            sc(ws16, r, 5, form_name, bold=True, sz=9, fc="FF000000", bg=bg, h="left")
+            sc(ws16, r, 6, fam_lbl, sz=9, bg=bg, h="left")
+            sc(ws16, r, 7, round(run_n / len(subset), 2) if subset else "", sz=9, fc="FF8B0000", bg=CRB, fmt="0%")
+            sc(ws16, r, 8, round(pass_n / len(subset), 2) if subset else "", sz=9, fc="FF00008B", bg=CPB, fmt="0%")
+            ws16.row_dimensions[r].height = 16
+            row += 1
+    row += 2
+
     # ── 1st & 2nd Down (combined) ──
     combo_plays = [p for p in plays if p['dn'] in (1, 2)]
     n_total = len(combo_plays)
