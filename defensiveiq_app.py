@@ -3647,6 +3647,36 @@ def build_excel(plays, opp, week, date):
             sc(ws16, row, 9, "", sz=9, bg=CYB)
             row += 1
 
+    row += 2
+
+    # ── Thursday Script (game simulation mix of all downs) ──
+    banner(ws16, row, "THURSDAY SCRIPT", NC16, bg=CB, sz=13, ht=26)
+    row += 1
+    ws16.merge_cells(start_row=row, start_column=1, end_row=row, end_column=NC16)
+    dn_counts = Counter(p['dn'] for p in plays if p['dn'] in (1, 2, 3, 4))
+    dn_total = sum(dn_counts.values())
+    dn_summary = " / ".join(f"{_DN_ORD.get(dn, dn)} {round(cnt/dn_total*100)}%"
+                             for dn, cnt in sorted(dn_counts.items())) if dn_total else "no downs tagged"
+    _thu_sub = ws16.cell(row=row, column=1,
+                          value=f"Game-simulation mix, matched to their real down distribution \u2014 {dn_summary}")
+    _thu_sub.font = Font(name=FN, size=9, italic=True, color=CDG)
+    _thu_sub.alignment = Alignment(horizontal="center", vertical="center")
+    ws16.row_dimensions[row].height = 16
+    row += 1
+    for c, txt, bg in [(1, "REP #", CTe), (2, "TYPE", CTe), (3, "DOWN", CTe), (4, "DIST", CTe),
+                       (5, "PLAY", CTe), (6, "FORMATION", CTe), (7, "HASH", CTe), (8, "PLAY #", CTe), (9, "NOTES", CTe)]:
+        hdr(ws16, row, c, txt, bg=bg, sz=9)
+    row += 1
+    all_down_plays = [p for p in plays if p['dn'] in (1, 2, 3, 4)]
+    thursday_script = _build_script(all_down_plays, 20)
+    if not thursday_script:
+        ws16.merge_cells(start_row=row, start_column=1, end_row=row, end_column=NC16)
+        c = ws16.cell(row=row, column=1, value="Not enough tagged data to build this script.")
+        c.font = Font(name=FN, sz=10, italic=True, color=CDG); c.alignment = Alignment(horizontal="center")
+        row += 1
+    else:
+        row = _write_script_rows(ws16, row, thursday_script)
+
     print_friendly(ws16, repeat_rows=None, one_page=False)
 
     # ── Tab 19: Formation Breakdown Sheets (3-column grid) ──────
