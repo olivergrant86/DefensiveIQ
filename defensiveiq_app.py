@@ -1797,9 +1797,10 @@ DD_SITS = [
     ("2ND & LONG",    lambda p: p['dn'] == 2 and p['dist'] >= 7),
     ("2ND & MEDIUM",  lambda p: p['dn'] == 2 and 4 <= p['dist'] <= 6),
     ("2ND & SHORT",   lambda p: p['dn'] == 2 and p['dist'] <= 3),
-    ("3RD & LONG",    lambda p: p['dn'] == 3 and p['dist'] >= 7),
-    ("3RD & MEDIUM",  lambda p: p['dn'] == 3 and 4 <= p['dist'] <= 6),
-    ("3RD & SHORT",   lambda p: p['dn'] == 3 and p['dist'] <= 3),
+    ("3RD & 12+ YARDS",  lambda p: p['dn'] == 3 and p['dist'] >= 12),
+    ("3RD & 7-11 YARDS", lambda p: p['dn'] == 3 and 7 <= p['dist'] <= 11),
+    ("3RD & 3-6 YARDS",  lambda p: p['dn'] == 3 and 3 <= p['dist'] <= 6),
+    ("3RD & 1-2 YARDS",  lambda p: p['dn'] == 3 and 1 <= p['dist'] <= 2),
     ("4TH DOWN",      lambda p: p['dn'] == 4),
     ("RED ZONE",      lambda p: p['zone'] == 'RZ'),
     ("GOAL LINE",     lambda p: p['zone'] == 'GL'),
@@ -3042,8 +3043,8 @@ def build_excel(plays, opp, week, date):
         hdr(ws12, r, ci, h, bg=CB, sz=8)
     r += 1
     dd_top_sits = [("1st & 10", DD_SITS[0][1]), ("2nd & Short", DD_SITS[4][1]), ("2nd & Med", DD_SITS[3][1]),
-                   ("2nd & Long", DD_SITS[2][1]), ("3rd & Short", DD_SITS[7][1]), ("3rd & Med", DD_SITS[6][1]),
-                   ("3rd & Long", DD_SITS[5][1]), ("4th Down", DD_SITS[8][1])]
+                   ("2nd & Long", DD_SITS[2][1]), ("3rd & 1-2", DD_SITS[8][1]), ("3rd & 3-6", DD_SITS[7][1]),
+                   ("3rd & 7-11", DD_SITS[6][1]), ("4th Down", DD_SITS[9][1])]
     for ri, (lbl, fn) in enumerate(dd_top_sits):
         bg = CL if ri % 2 == 0 else CW
         sp = [p for p in plays if fn(p)]
