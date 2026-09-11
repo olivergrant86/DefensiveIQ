@@ -4084,6 +4084,33 @@ def build_excel(plays, opp, week, date):
                 right=_frame_side if _c == _last_col else _existing.right,
             )
 
+    # ── Final tab order & renumbering ────────────────────────────
+    _new_order = [
+        ("0. Cover", "1. Cover"),
+        ("18. Practice Scripts", "2. Practice Scripts"),
+        ("19. Formation Breakdowns", "3. Formation Breakdowns"),
+        ("7. Run Concepts", "4. Run Concepts"),
+        ("8. Pass Concepts", "5. Pass Concepts"),
+        ("6. Down & Distance", "6. Down & Distance"),
+        ("9. Formation Tendencies", "7. Formation Tendencies"),
+        ("13. Form Family Tendencies", "8. Form Family Tendencies"),
+        ("14. FIB Tendencies", "9. FIB Tendencies"),
+        ("16. Open-Closed", "10. Open-Closed"),
+        ("15. Back Depth", "11. Back Depth"),
+        ("17. Stats", "12. Stats"),
+        ("12. Game Day Call Sheet", "13. Game Day Call Sheet"),
+        ("3. Run Tendencies", "14. Run Tendencies"),
+        ("4. Pass Tendencies", "15. Pass Tendencies"),
+        ("5. Hash Tendencies", "16. Hash Tendencies"),
+        ("2. Field Zone Tendencies", "17. Field Zone Tendencies"),
+        ("10. Situational Summary", "18. Situational Summary"),
+        ("11. Call Sheet Builder", "19. Call Sheet Builder"),
+        ("1. Film Log", "20. Film Log"),
+    ]
+    for old_name, new_name in _new_order:
+        wb2[old_name].title = new_name
+    wb2._sheets = [wb2[new_name] for _old_name, new_name in _new_order]
+
     buf = io.BytesIO(); wb2.save(buf); buf.seek(0)
     return buf.getvalue()
 
