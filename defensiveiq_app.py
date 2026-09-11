@@ -4046,6 +4046,10 @@ def build_excel(plays, opp, week, date):
     for r in range(1, 26):
         ws_cov.row_dimensions[r].height = 22
     banner(ws_cov, 1, "DUNCAN DEMONS  \u00b7  DEFENSIVEIQ", 13, bg=CB, sz=16, ht=36)
+    ws_cov.merge_cells("A2:M2")
+    ws_cov.row_dimensions[2].height = 5
+    _accent_cell = ws_cov.cell(row=2, column=1, value="")
+    _accent_cell.fill = fil("FFD2011A")
     _cov_logo = XLImage(_logo_stream())
     _cov_logo.width, _cov_logo.height = 220, 210
     ws_cov.add_image(_cov_logo, "F4")
@@ -4066,6 +4070,19 @@ def build_excel(plays, opp, week, date):
     c = ws_cov.cell(row=23, column=2, value="Auto-generated from film \u2014 see the tabs below for the full breakdown.")
     c.font = Font(name=FN, size=10, italic=True, color="FF999999")
     c.alignment = Alignment(horizontal="center", vertical="center")
+    ws_cov.merge_cells("B24:M24")
+    c = ws_cov.cell(row=24, column=2, value="C O N F I D E N T I A L   \u2014   I N T E R N A L   U S E   O N L Y")
+    c.font = Font(name=FN, size=8, color="FFBBBBBB")
+    c.alignment = Alignment(horizontal="center", vertical="center")
+
+    # Subtle yard-line texture across the page background
+    _yard_side = Side(style="hair", color="FFF0D8D8")
+    for _yr in (3, 6, 9, 12, 18, 21):
+        for _yc in range(2, 14):
+            _ycell = ws_cov.cell(row=_yr, column=_yc)
+            _yexisting = _ycell.border
+            _ycell.border = Border(top=_yexisting.top, bottom=_yard_side,
+                                    left=_yexisting.left, right=_yexisting.right)
 
     # Decorative frame around the printable cover page
     _frame_side = Side(style="thick", color="FFD2011A")
