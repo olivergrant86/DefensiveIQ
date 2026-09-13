@@ -4569,8 +4569,8 @@ def build_excel(plays, opp, week, date):
     # ── Tab 18: Practice Scripts ────────────────────────────────
     ws16 = wb2.create_sheet("18. Practice Scripts")
     ws16.sheet_properties.tabColor = "0D0D0D"; ws16.sheet_view.showGridLines = False
-    NC16 = 9
-    widths(ws16, [8, 8, 8, 10, 22, 24, 8, 10, 30])
+    NC16 = 10
+    widths(ws16, [8, 8, 8, 10, 22, 8, 24, 8, 10, 30])
     _DN_ORD = {1: "1st", 2: "2nd", 3: "3rd", 4: "4th"}
 
     def _select_real_plays(group_plays, n_slots, max_per_formation=None):
@@ -4750,15 +4750,17 @@ def build_excel(plays, opp, week, date):
             play_type = p['rp']
             type_color = "FF8B0000" if play_type == "Run" else "FF00008B"
             type_bg = CRB if play_type == "Run" else CPB
+            _fib_c = "FFD2011A" if _is_fib(p['fib']) else "FF1E8449"
             sc(ws, r, 1, i, bold=True, sz=9, fc="FF000000", bg=bg, fmt="0")
             sc(ws, r, 2, play_type, bold=True, sz=9, fc=type_color, bg=type_bg)
             sc(ws, r, 3, _DN_ORD.get(p['dn'], str(p['dn'])), sz=9, bg=bg)
             sc(ws, r, 4, p['dist'], sz=9, bg=bg, fmt="0")
-            sc(ws, r, 5, p['concept'], bold=True, sz=9, fc="FF000000", bg=bg, h="left")
-            sc(ws, r, 6, p['form'], sz=9, bg=bg, h="left")
-            sc(ws, r, 7, p['hash'] or "\u2014", sz=9, bg=bg)
-            sc(ws, r, 8, _play_num(p.get('play_num', '')), sz=9, bg=bg)
-            sc(ws, r, 9, "", sz=9, bg=CYB)
+            sc(ws, r, 5, p['concept'], bold=True, sz=9, fc=_fib_c, bg=bg, h="left")
+            sc(ws, r, 6, p.get('dir') or "\u2014", sz=9, bg=bg)
+            sc(ws, r, 7, p['form'], sz=9, fc=_fib_c, bg=bg, h="left")
+            sc(ws, r, 8, p['hash'] or "\u2014", sz=9, bg=bg)
+            sc(ws, r, 9, _play_num(p.get('play_num', '')), sz=9, bg=bg)
+            sc(ws, r, 10, "", sz=9, bg=CYB)
             r += 1
         return r
 
@@ -4817,7 +4819,7 @@ def build_excel(plays, opp, week, date):
     ws16.row_dimensions[row].height = 16
     row += 1
     for c, txt, bg in [(1, "REP #", CTe), (2, "TYPE", CTe), (3, "DOWN", CTe), (4, "DIST", CTe),
-                       (5, "PLAY", CTe), (6, "FORMATION", CTe), (7, "HASH", CTe), (8, "PLAY #", CTe), (9, "NOTES", CTe)]:
+                       (5, "PLAY", CTe), (6, "DIR", CTe), (7, "FORMATION", CTe), (8, "HASH", CTe), (9, "PLAY #", CTe), (10, "NOTES", CTe)]:
         hdr(ws16, row, c, txt, bg=bg, sz=9)
     row += 1
     script = _build_script(combo_plays, 20)
@@ -4841,7 +4843,7 @@ def build_excel(plays, opp, week, date):
     ws16.row_dimensions[row].height = 16
     row += 1
     for c, txt, bg in [(1, "REP #", CTe), (2, "TYPE", CTe), (3, "DOWN", CTe), (4, "DIST", CTe),
-                       (5, "PLAY", CTe), (6, "FORMATION", CTe), (7, "HASH", CTe), (8, "PLAY #", CTe), (9, "NOTES", CTe)]:
+                       (5, "PLAY", CTe), (6, "DIR", CTe), (7, "FORMATION", CTe), (8, "HASH", CTe), (9, "PLAY #", CTe), (10, "NOTES", CTe)]:
         hdr(ws16, row, c, txt, bg=bg, sz=9)
     row += 1
 
@@ -4876,15 +4878,17 @@ def build_excel(plays, opp, week, date):
             play_type = p['rp']
             type_color = "FF8B0000" if play_type == "Run" else "FF00008B"
             type_bg = CRB if play_type == "Run" else CPB
+            _fib_c = "FFD2011A" if _is_fib(p['fib']) else "FF1E8449"
             sc(ws16, row, 1, i, bold=True, sz=9, fc="FF000000", bg=bg, fmt="0")
             sc(ws16, row, 2, play_type, bold=True, sz=9, fc=type_color, bg=type_bg)
             sc(ws16, row, 3, _DN_ORD.get(p['dn'], str(p['dn'])), sz=9, bg=bg)
             sc(ws16, row, 4, p['dist'], sz=9, bg=bg, fmt="0")
-            sc(ws16, row, 5, p['concept'], bold=True, sz=9, fc="FF000000", bg=bg, h="left")
-            sc(ws16, row, 6, p['form'], sz=9, bg=bg, h="left")
-            sc(ws16, row, 7, p['hash'] or "\u2014", sz=9, bg=bg)
-            sc(ws16, row, 8, _play_num(p.get('play_num', '')), sz=9, bg=bg)
-            sc(ws16, row, 9, "", sz=9, bg=CYB)
+            sc(ws16, row, 5, p['concept'], bold=True, sz=9, fc=_fib_c, bg=bg, h="left")
+            sc(ws16, row, 6, p.get('dir') or "\u2014", sz=9, bg=bg)
+            sc(ws16, row, 7, p['form'], sz=9, fc=_fib_c, bg=bg, h="left")
+            sc(ws16, row, 8, p['hash'] or "\u2014", sz=9, bg=bg)
+            sc(ws16, row, 9, _play_num(p.get('play_num', '')), sz=9, bg=bg)
+            sc(ws16, row, 10, "", sz=9, bg=CYB)
             row += 1
 
     row += 2
@@ -4900,7 +4904,7 @@ def build_excel(plays, opp, week, date):
     ws16.row_dimensions[row].height = 16
     row += 1
     for c, txt, bg in [(1, "REP #", CTe), (2, "TYPE", CTe), (3, "DOWN", CTe), (4, "DIST", CTe),
-                       (5, "PLAY", CTe), (6, "FORMATION", CTe), (7, "HASH", CTe), (8, "PLAY #", CTe), (9, "NOTES", CTe)]:
+                       (5, "PLAY", CTe), (6, "DIR", CTe), (7, "FORMATION", CTe), (8, "HASH", CTe), (9, "PLAY #", CTe), (10, "NOTES", CTe)]:
         hdr(ws16, row, c, txt, bg=bg, sz=9)
     row += 1
     rz_buckets = [
@@ -4931,15 +4935,17 @@ def build_excel(plays, opp, week, date):
             play_type = p['rp']
             type_color = "FF8B0000" if play_type == "Run" else "FF00008B"
             type_bg = CRB if play_type == "Run" else CPB
+            _fib_c = "FFD2011A" if _is_fib(p['fib']) else "FF1E8449"
             sc(ws16, row, 1, i, bold=True, sz=9, fc="FF000000", bg=bg, fmt="0")
             sc(ws16, row, 2, play_type, bold=True, sz=9, fc=type_color, bg=type_bg)
             sc(ws16, row, 3, _DN_ORD.get(p['dn'], str(p['dn'])), sz=9, bg=bg)
             sc(ws16, row, 4, p['dist'], sz=9, bg=bg, fmt="0")
-            sc(ws16, row, 5, p['concept'], bold=True, sz=9, fc="FF000000", bg=bg, h="left")
-            sc(ws16, row, 6, p['form'], sz=9, bg=bg, h="left")
-            sc(ws16, row, 7, p['hash'] or "\u2014", sz=9, bg=bg)
-            sc(ws16, row, 8, _play_num(p.get('play_num', '')), sz=9, bg=bg)
-            sc(ws16, row, 9, "", sz=9, bg=CYB)
+            sc(ws16, row, 5, p['concept'], bold=True, sz=9, fc=_fib_c, bg=bg, h="left")
+            sc(ws16, row, 6, p.get('dir') or "\u2014", sz=9, bg=bg)
+            sc(ws16, row, 7, p['form'], sz=9, fc=_fib_c, bg=bg, h="left")
+            sc(ws16, row, 8, p['hash'] or "\u2014", sz=9, bg=bg)
+            sc(ws16, row, 9, _play_num(p.get('play_num', '')), sz=9, bg=bg)
+            sc(ws16, row, 10, "", sz=9, bg=CYB)
             row += 1
 
     row += 2
@@ -4959,7 +4965,7 @@ def build_excel(plays, opp, week, date):
     ws16.row_dimensions[row].height = 16
     row += 1
     for c, txt, bg in [(1, "REP #", CTe), (2, "TYPE", CTe), (3, "DOWN", CTe), (4, "DIST", CTe),
-                       (5, "PLAY", CTe), (6, "FORMATION", CTe), (7, "HASH", CTe), (8, "PLAY #", CTe), (9, "NOTES", CTe)]:
+                       (5, "PLAY", CTe), (6, "DIR", CTe), (7, "FORMATION", CTe), (8, "HASH", CTe), (9, "PLAY #", CTe), (10, "NOTES", CTe)]:
         hdr(ws16, row, c, txt, bg=bg, sz=9)
     row += 1
     all_down_plays = [p for p in plays if p['dn'] in (1, 2, 3, 4)]
