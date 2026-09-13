@@ -4632,23 +4632,48 @@ def build_excel(plays, opp, week, date):
             selected.extend(chosen[:cnt])
         return selected
 
-    def _limit_consecutive_formations(script, max_consecutive=2):
-        """No formation shows up 3 reps in a row — swap a later rep in to
+    def _limit_consecutive_attr(script, attr, max_consecutive):
+        """No value of the given attribute (formation, play name, etc.) shows
+        up more than max_consecutive reps in a row — swap a later rep in to
         break up the streak wherever it happens."""
         script = list(script)
         n = len(script)
-        for _pass_num in range(5):
+        for _pass_num in range(6):
             changed = False
             for i in range(max_consecutive, n):
-                if all(script[i - k]['form'] == script[i]['form'] for k in range(max_consecutive + 1)):
+                if all(script[i - k][attr] == script[i][attr] for k in range(max_consecutive + 1)):
                     for j in range(i + 1, n):
-                        if script[j]['form'] != script[i]['form']:
+                        if script[j][attr] != script[i][attr]:
                             script[i], script[j] = script[j], script[i]
                             changed = True
                             break
             if not changed:
                 break
         return script
+
+    def _limit_consecutive_attr_same_down(script, attr, max_consecutive):
+        """Same idea as _limit_consecutive_attr, but only swaps with a later
+        rep on the SAME down -- so fixing a repeat never disturbs the
+        1st-2nd-3rd drive ordering the Thursday Script depends on."""
+        script = list(script)
+        n = len(script)
+        for _pass_num in range(6):
+            changed = False
+            for i in range(max_consecutive, n):
+                if all(script[i - k][attr] == script[i][attr] for k in range(max_consecutive + 1)):
+                    for j in range(i + 1, n):
+                        if script[j][attr] != script[i][attr] and script[j]['dn'] == script[i]['dn']:
+                            script[i], script[j] = script[j], script[i]
+                            changed = True
+                            break
+            if not changed:
+                break
+        return script
+
+    def _limit_consecutive_formations(script, max_consecutive=2):
+        """No formation shows up 3 reps in a row (kept as a thin wrapper
+        around the generalized attribute limiter for clarity)."""
+        return _limit_consecutive_attr(script, 'form', max_consecutive)
 
     def _build_script(down_plays, total_reps):
         """Real plays, run/pass split matched to their actual tendency,
@@ -4672,7 +4697,9 @@ def build_excel(plays, opp, week, date):
                 script.append(run_script[i_r]); i_r += 1
             else:
                 script.append(pass_script[i_p]); i_p += 1
-        return _limit_consecutive_formations(script, max_consecutive=2)
+        script = _limit_consecutive_formations(script, max_consecutive=2)
+        script = _limit_consecutive_attr(script, 'concept', max_consecutive=1)
+        return script
 
     def _build_thursday_script(down_plays, total_reps=20, n_fourth=2):
         """A realistic drive-simulation order: 1st down, 2nd down, 3rd down,
@@ -4712,6 +4739,8 @@ def build_excel(plays, opp, week, date):
         for extra in (script_1, script_2, script_3):
             if len(extra) > n_cycles:
                 combined.extend(extra[n_cycles:])
+        combined = _limit_consecutive_attr_same_down(combined, 'form', max_consecutive=2)
+        combined = _limit_consecutive_attr_same_down(combined, 'concept', max_consecutive=1)
         return combined
 
     def _write_script_rows(ws, start_row, script):
