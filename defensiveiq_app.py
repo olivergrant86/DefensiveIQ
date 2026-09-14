@@ -4569,8 +4569,8 @@ def build_excel(plays, opp, week, date):
     # ── Tab 18: Practice Scripts ────────────────────────────────
     ws16 = wb2.create_sheet("18. Practice Scripts")
     ws16.sheet_properties.tabColor = "0D0D0D"; ws16.sheet_view.showGridLines = False
-    NC16 = 9
-    widths(ws16, [8, 8, 8, 10, 22, 24, 8, 10, 30])
+    NC16 = 10
+    widths(ws16, [8, 8, 8, 10, 22, 8, 24, 8, 10, 30])
     _DN_ORD = {1: "1st", 2: "2nd", 3: "3rd", 4: "4th"}
 
     def _select_real_plays(group_plays, n_slots, max_per_formation=None):
@@ -4632,23 +4632,48 @@ def build_excel(plays, opp, week, date):
             selected.extend(chosen[:cnt])
         return selected
 
-    def _limit_consecutive_formations(script, max_consecutive=2):
-        """No formation shows up 3 reps in a row — swap a later rep in to
+    def _limit_consecutive_attr(script, attr, max_consecutive):
+        """No value of the given attribute (formation, play name, etc.) shows
+        up more than max_consecutive reps in a row — swap a later rep in to
         break up the streak wherever it happens."""
         script = list(script)
         n = len(script)
-        for _pass_num in range(5):
+        for _pass_num in range(6):
             changed = False
             for i in range(max_consecutive, n):
-                if all(script[i - k]['form'] == script[i]['form'] for k in range(max_consecutive + 1)):
+                if all(script[i - k][attr] == script[i][attr] for k in range(max_consecutive + 1)):
                     for j in range(i + 1, n):
-                        if script[j]['form'] != script[i]['form']:
+                        if script[j][attr] != script[i][attr]:
                             script[i], script[j] = script[j], script[i]
                             changed = True
                             break
             if not changed:
                 break
         return script
+
+    def _limit_consecutive_attr_same_down(script, attr, max_consecutive):
+        """Same idea as _limit_consecutive_attr, but only swaps with a later
+        rep on the SAME down -- so fixing a repeat never disturbs the
+        1st-2nd-3rd drive ordering the Thursday Script depends on."""
+        script = list(script)
+        n = len(script)
+        for _pass_num in range(6):
+            changed = False
+            for i in range(max_consecutive, n):
+                if all(script[i - k][attr] == script[i][attr] for k in range(max_consecutive + 1)):
+                    for j in range(i + 1, n):
+                        if script[j][attr] != script[i][attr] and script[j]['dn'] == script[i]['dn']:
+                            script[i], script[j] = script[j], script[i]
+                            changed = True
+                            break
+            if not changed:
+                break
+        return script
+
+    def _limit_consecutive_formations(script, max_consecutive=2):
+        """No formation shows up 3 reps in a row (kept as a thin wrapper
+        around the generalized attribute limiter for clarity)."""
+        return _limit_consecutive_attr(script, 'form', max_consecutive)
 
     def _build_script(down_plays, total_reps):
         """Real plays, run/pass split matched to their actual tendency,
@@ -4672,7 +4697,9 @@ def build_excel(plays, opp, week, date):
                 script.append(run_script[i_r]); i_r += 1
             else:
                 script.append(pass_script[i_p]); i_p += 1
-        return _limit_consecutive_formations(script, max_consecutive=2)
+        script = _limit_consecutive_formations(script, max_consecutive=2)
+        script = _limit_consecutive_attr(script, 'concept', max_consecutive=1)
+        return script
 
     def _build_thursday_script(down_plays, total_reps=20, n_fourth=2):
         """A realistic drive-simulation order: 1st down, 2nd down, 3rd down,
@@ -4712,6 +4739,8 @@ def build_excel(plays, opp, week, date):
         for extra in (script_1, script_2, script_3):
             if len(extra) > n_cycles:
                 combined.extend(extra[n_cycles:])
+        combined = _limit_consecutive_attr_same_down(combined, 'form', max_consecutive=2)
+        combined = _limit_consecutive_attr_same_down(combined, 'concept', max_consecutive=1)
         return combined
 
     def _write_script_rows(ws, start_row, script):
@@ -4721,15 +4750,17 @@ def build_excel(plays, opp, week, date):
             play_type = p['rp']
             type_color = "FF8B0000" if play_type == "Run" else "FF00008B"
             type_bg = CRB if play_type == "Run" else CPB
+            _fib_c = "FFD2011A" if _is_fib(p['fib']) else "FF1E8449"
             sc(ws, r, 1, i, bold=True, sz=9, fc="FF000000", bg=bg, fmt="0")
             sc(ws, r, 2, play_type, bold=True, sz=9, fc=type_color, bg=type_bg)
             sc(ws, r, 3, _DN_ORD.get(p['dn'], str(p['dn'])), sz=9, bg=bg)
             sc(ws, r, 4, p['dist'], sz=9, bg=bg, fmt="0")
-            sc(ws, r, 5, p['concept'], bold=True, sz=9, fc="FF000000", bg=bg, h="left")
-            sc(ws, r, 6, p['form'], sz=9, bg=bg, h="left")
-            sc(ws, r, 7, p['hash'] or "\u2014", sz=9, bg=bg)
-            sc(ws, r, 8, _play_num(p.get('play_num', '')), sz=9, bg=bg)
-            sc(ws, r, 9, "", sz=9, bg=CYB)
+            sc(ws, r, 5, p['concept'], bold=True, sz=9, fc=_fib_c, bg=bg, h="left")
+            sc(ws, r, 6, p.get('dir') or "\u2014", sz=9, bg=bg)
+            sc(ws, r, 7, p['form'], sz=9, fc=_fib_c, bg=bg, h="left")
+            sc(ws, r, 8, p['hash'] or "\u2014", sz=9, bg=bg)
+            sc(ws, r, 9, _play_num(p.get('play_num', '')), sz=9, bg=bg)
+            sc(ws, r, 10, "", sz=9, bg=CYB)
             r += 1
         return r
 
@@ -4788,7 +4819,7 @@ def build_excel(plays, opp, week, date):
     ws16.row_dimensions[row].height = 16
     row += 1
     for c, txt, bg in [(1, "REP #", CTe), (2, "TYPE", CTe), (3, "DOWN", CTe), (4, "DIST", CTe),
-                       (5, "PLAY", CTe), (6, "FORMATION", CTe), (7, "HASH", CTe), (8, "PLAY #", CTe), (9, "NOTES", CTe)]:
+                       (5, "PLAY", CTe), (6, "DIR", CTe), (7, "FORMATION", CTe), (8, "HASH", CTe), (9, "PLAY #", CTe), (10, "NOTES", CTe)]:
         hdr(ws16, row, c, txt, bg=bg, sz=9)
     row += 1
     script = _build_script(combo_plays, 20)
@@ -4812,7 +4843,7 @@ def build_excel(plays, opp, week, date):
     ws16.row_dimensions[row].height = 16
     row += 1
     for c, txt, bg in [(1, "REP #", CTe), (2, "TYPE", CTe), (3, "DOWN", CTe), (4, "DIST", CTe),
-                       (5, "PLAY", CTe), (6, "FORMATION", CTe), (7, "HASH", CTe), (8, "PLAY #", CTe), (9, "NOTES", CTe)]:
+                       (5, "PLAY", CTe), (6, "DIR", CTe), (7, "FORMATION", CTe), (8, "HASH", CTe), (9, "PLAY #", CTe), (10, "NOTES", CTe)]:
         hdr(ws16, row, c, txt, bg=bg, sz=9)
     row += 1
 
@@ -4847,15 +4878,17 @@ def build_excel(plays, opp, week, date):
             play_type = p['rp']
             type_color = "FF8B0000" if play_type == "Run" else "FF00008B"
             type_bg = CRB if play_type == "Run" else CPB
+            _fib_c = "FFD2011A" if _is_fib(p['fib']) else "FF1E8449"
             sc(ws16, row, 1, i, bold=True, sz=9, fc="FF000000", bg=bg, fmt="0")
             sc(ws16, row, 2, play_type, bold=True, sz=9, fc=type_color, bg=type_bg)
             sc(ws16, row, 3, _DN_ORD.get(p['dn'], str(p['dn'])), sz=9, bg=bg)
             sc(ws16, row, 4, p['dist'], sz=9, bg=bg, fmt="0")
-            sc(ws16, row, 5, p['concept'], bold=True, sz=9, fc="FF000000", bg=bg, h="left")
-            sc(ws16, row, 6, p['form'], sz=9, bg=bg, h="left")
-            sc(ws16, row, 7, p['hash'] or "\u2014", sz=9, bg=bg)
-            sc(ws16, row, 8, _play_num(p.get('play_num', '')), sz=9, bg=bg)
-            sc(ws16, row, 9, "", sz=9, bg=CYB)
+            sc(ws16, row, 5, p['concept'], bold=True, sz=9, fc=_fib_c, bg=bg, h="left")
+            sc(ws16, row, 6, p.get('dir') or "\u2014", sz=9, bg=bg)
+            sc(ws16, row, 7, p['form'], sz=9, fc=_fib_c, bg=bg, h="left")
+            sc(ws16, row, 8, p['hash'] or "\u2014", sz=9, bg=bg)
+            sc(ws16, row, 9, _play_num(p.get('play_num', '')), sz=9, bg=bg)
+            sc(ws16, row, 10, "", sz=9, bg=CYB)
             row += 1
 
     row += 2
@@ -4871,7 +4904,7 @@ def build_excel(plays, opp, week, date):
     ws16.row_dimensions[row].height = 16
     row += 1
     for c, txt, bg in [(1, "REP #", CTe), (2, "TYPE", CTe), (3, "DOWN", CTe), (4, "DIST", CTe),
-                       (5, "PLAY", CTe), (6, "FORMATION", CTe), (7, "HASH", CTe), (8, "PLAY #", CTe), (9, "NOTES", CTe)]:
+                       (5, "PLAY", CTe), (6, "DIR", CTe), (7, "FORMATION", CTe), (8, "HASH", CTe), (9, "PLAY #", CTe), (10, "NOTES", CTe)]:
         hdr(ws16, row, c, txt, bg=bg, sz=9)
     row += 1
     rz_buckets = [
@@ -4902,15 +4935,17 @@ def build_excel(plays, opp, week, date):
             play_type = p['rp']
             type_color = "FF8B0000" if play_type == "Run" else "FF00008B"
             type_bg = CRB if play_type == "Run" else CPB
+            _fib_c = "FFD2011A" if _is_fib(p['fib']) else "FF1E8449"
             sc(ws16, row, 1, i, bold=True, sz=9, fc="FF000000", bg=bg, fmt="0")
             sc(ws16, row, 2, play_type, bold=True, sz=9, fc=type_color, bg=type_bg)
             sc(ws16, row, 3, _DN_ORD.get(p['dn'], str(p['dn'])), sz=9, bg=bg)
             sc(ws16, row, 4, p['dist'], sz=9, bg=bg, fmt="0")
-            sc(ws16, row, 5, p['concept'], bold=True, sz=9, fc="FF000000", bg=bg, h="left")
-            sc(ws16, row, 6, p['form'], sz=9, bg=bg, h="left")
-            sc(ws16, row, 7, p['hash'] or "\u2014", sz=9, bg=bg)
-            sc(ws16, row, 8, _play_num(p.get('play_num', '')), sz=9, bg=bg)
-            sc(ws16, row, 9, "", sz=9, bg=CYB)
+            sc(ws16, row, 5, p['concept'], bold=True, sz=9, fc=_fib_c, bg=bg, h="left")
+            sc(ws16, row, 6, p.get('dir') or "\u2014", sz=9, bg=bg)
+            sc(ws16, row, 7, p['form'], sz=9, fc=_fib_c, bg=bg, h="left")
+            sc(ws16, row, 8, p['hash'] or "\u2014", sz=9, bg=bg)
+            sc(ws16, row, 9, _play_num(p.get('play_num', '')), sz=9, bg=bg)
+            sc(ws16, row, 10, "", sz=9, bg=CYB)
             row += 1
 
     row += 2
@@ -4930,7 +4965,7 @@ def build_excel(plays, opp, week, date):
     ws16.row_dimensions[row].height = 16
     row += 1
     for c, txt, bg in [(1, "REP #", CTe), (2, "TYPE", CTe), (3, "DOWN", CTe), (4, "DIST", CTe),
-                       (5, "PLAY", CTe), (6, "FORMATION", CTe), (7, "HASH", CTe), (8, "PLAY #", CTe), (9, "NOTES", CTe)]:
+                       (5, "PLAY", CTe), (6, "DIR", CTe), (7, "FORMATION", CTe), (8, "HASH", CTe), (9, "PLAY #", CTe), (10, "NOTES", CTe)]:
         hdr(ws16, row, c, txt, bg=bg, sz=9)
     row += 1
     all_down_plays = [p for p in plays if p['dn'] in (1, 2, 3, 4)]
@@ -5309,55 +5344,60 @@ def build_excel(plays, opp, week, date):
 
 # ── HTML Report ───────────────────────────────────────────────
 def build_html(plays, opp, week, date):
-    zc = {"BZ": "#D2011A", "OF": "#1a5276", "MF": "#0e7060", "FZ": "#7d6608", "RZ": "#D2011A", "GL": "#4a235a"}
     total = len(plays); runs = [p for p in plays if p['rp'] == 'Run']; passes = [p for p in plays if p['rp'] == 'Pass']
 
-    def tags(items, cls=''):
-        if not items: return '<span class="ctag">—</span>'
-        return ''.join(f'<span class="ctag {cls}">{x["v"]} ({x["n"]})</span>' for x in items)
+    def group_cards(items_with_plays, color='#d4a017'):
+        cards = ''
+        for label, sp in items_with_plays:
+            gr = [p for p in sp if p['rp'] == 'Run']; gp = [p for p in sp if p['rp'] == 'Pass']
+            tr = top3(gr, 'concept', 1); tp = top3(gp, 'concept', 1)
+            cards += f'''<div class="hash-card">
+              <div class="hc-title" style="color:{color}">{label}</div>
+              <div class="hbig" style="color:{color}">{len(sp)}</div>
+              <div class="hsub">total plays</div>
+              <div class="hrp">
+                <div class="hrp-item"><div class="hrp-lbl">Run %</div><div class="hrp-val" style="color:#D2011A">{pct(len(gr),len(sp))}%</div></div>
+                <div class="hrp-item"><div class="hrp-lbl">Pass %</div><div class="hrp-val" style="color:#5dade2">{pct(len(gp),len(sp))}%</div></div>
+              </div>
+              <div class="htc">Top Run: <span style="color:#e8a095">{tr[0]["v"]+" ("+str(tr[0]["n"])+")" if tr else "—"}</span></div>
+              <div class="htc">Top Pass: <span style="color:#93d4f0">{tp[0]["v"]+" ("+str(tp[0]["n"])+")" if tp else "—"}</span></div>
+            </div>'''
+        return cards or '<div style="color:rgba(240,237,232,.3);font-size:12px">No data tagged</div>'
 
-    zone_cards = ''
-    for z in ZONE_LIST:
-        zp = [p for p in plays if p['zone'] == z]
-        if not zp: continue
-        zr2 = [p for p in zp if p['rp'] == 'Run']; zpas = [p for p in zp if p['rp'] == 'Pass']
-        rp = pct(len(zr2), len(zp)); pp = pct(len(zpas), len(zp))
-        zone_cards += f'''<div class="zone-card">
-          <div class="zone-hdr" style="background:{zc[z]}20;border-bottom:2px solid {zc[z]}">
-            <div><div class="zone-badge" style="color:{zc[z]}">{z}</div><div class="zone-sub">{ZONE_NAMES[z]}</div></div>
-            <div class="zone-plays">{len(zp)} plays</div>
-          </div>
-          <div class="zone-body">
-            <div class="bar-row">
-              <div class="bar-labels"><span style="color:#e8a095">RUN {rp}%</span><span style="color:#93d4f0">PASS {pp}%</span></div>
-              <div class="bar-bg"><div class="bar-fill" style="background:#D2011A;width:{rp}%"></div></div>
-            </div>
-            <div class="zone-tags">
-              <div class="tag-lbl">Top Run Concepts</div>{tags(top3(zr2,"concept"),"f")}
-              <div class="tag-lbl" style="margin-top:6px">Top Pass Concepts</div>{tags(top3(zpas,"concept"),"c")}
-              <div class="tag-lbl" style="margin-top:6px">Top Formations</div>{tags(top3(zp,"form"),"b")}
-            </div>
-          </div>
-        </div>'''
+    form_groups = {}
+    for p in plays:
+        f = str(p.get('form', '')).strip()
+        if f in ('', 'nan', 'None'): continue
+        form_groups.setdefault(f, []).append(p)
+    top5_forms = sorted(form_groups.items(), key=lambda kv: -len(kv[1]))[:5]
+    form_cards = group_cards(top5_forms, '#d4a017')
 
-    hash_cards = ''
-    for h, lbl, cls, color in [('L', 'Left Hash', 'hl', '#b388d4'), ('M', 'Middle', 'hm', '#5dade2'), ('R', 'Right Hash', 'hr', '#e59866')]:
-        hp = [p for p in plays if p['hash'] == h]
-        if not hp:
-            hash_cards += f'<div class="hash-card {cls}"><div class="hc-title" style="color:{color}">{lbl}</div><p style="color:rgba(240,237,232,.25);text-align:center;font-size:12px">No data</p></div>'
-            continue
-        hr2 = [p for p in hp if p['rp'] == 'Run']; hpass = [p for p in hp if p['rp'] == 'Pass']
-        tf = top3(hp, 'concept', 1)
-        hash_cards += f'''<div class="hash-card {cls}">
-          <div class="hc-title" style="color:{color}">{lbl}</div>
-          <div class="hbig" style="color:{color}">{len(hp)}</div>
-          <div class="hsub">total plays</div>
-          <div class="hrp">
-            <div class="hrp-item"><div class="hrp-lbl">Run %</div><div class="hrp-val" style="color:#D2011A">{pct(len(hr2),len(hp))}%</div></div>
-            <div class="hrp-item"><div class="hrp-lbl">Pass %</div><div class="hrp-val" style="color:#5dade2">{pct(len(hpass),len(hp))}%</div></div>
-          </div>
-          <div class="htc">Top Concept: <span style="color:#d4a017">{tf[0]["v"]+" ("+str(tf[0]["n"])+")" if tf else "—"}</span></div>
-        </div>'''
+    bd_groups = {}
+    for p in plays:
+        bd = str(p.get('back_depth', '')).strip()
+        if bd in ('', 'nan', 'None'): continue
+        bd_groups.setdefault(bd, []).append(p)
+    bd_items = sorted(bd_groups.items(), key=lambda kv: -len(kv[1]))
+    bd_cards = group_cards(bd_items, '#b388d4')
+
+    oc_groups = {}
+    for p in plays:
+        oc = str(p.get('open_close', '')).strip()
+        if oc in ('', 'nan', 'None'): continue
+        oc_groups.setdefault(oc, []).append(p)
+    oc_items = sorted(oc_groups.items(), key=lambda kv: -len(kv[1]))
+    oc_cards = group_cards(oc_items, '#5dade2')
+
+    passing, rushing, receiving = compute_player_stats(plays)
+    def stat_rows(d, cols):
+        rows = ''
+        for jersey, s in sorted(d.items(), key=lambda kv: -kv[1]['yds']):
+            vals = [jersey] + [str(s.get(c, '—')) if s.get(c) not in (None, 0, '') or c == 'yds' else '—' for c in cols]
+            rows += '<tr>' + ''.join(f'<td style="text-align:{"left" if i==0 else "center"}">{v}</td>' for i, v in enumerate(vals)) + '</tr>'
+        return rows or '<tr><td colspan="8" style="text-align:center;color:rgba(240,237,232,.35)">No data tagged</td></tr>'
+    pass_rows = stat_rows(passing, ['att', 'cmp', 'yds', 'td', 'int', 'lng'])
+    rush_rows = stat_rows(rushing, ['att', 'yds', 'td', 'lng'])
+    rec_rows = stat_rows(receiving, ['rec', 'yds', 'td', 'lng'])
 
     sit_rows = ''
     for lbl, fn in DD_SITS:
@@ -5400,8 +5440,16 @@ def build_html(plays, opp, week, date):
 </div>
 <div class="stitle">Biggest Tendencies</div>
 <div class="alert-box">{big_html}</div>
-<div class="stitle">Field Zone Breakdown</div><div class="zone-grid">{zone_cards}</div>
-<div class="stitle">Hash Tendencies</div><div class="hash-grid">{hash_cards}</div>
+<div class="stitle">Formation Tendencies — Top 5</div><div class="hash-grid">{form_cards}</div>
+<div class="stitle">Back Depth</div><div class="hash-grid">{bd_cards}</div>
+<div class="stitle">Open / Closed</div><div class="hash-grid">{oc_cards}</div>
+<div class="stitle">Player Stats</div>
+<div style="margin-bottom:20px"><div class="eyebrow" style="margin-bottom:8px">// Passing</div>
+<table class="sit-table"><tr><th style="text-align:left">Player</th><th>Att</th><th>Cmp</th><th>Yds</th><th>TD</th><th>Int</th><th>Lng</th></tr>{pass_rows}</table></div>
+<div style="margin-bottom:20px"><div class="eyebrow" style="margin-bottom:8px">// Rushing</div>
+<table class="sit-table"><tr><th style="text-align:left">Player</th><th>Att</th><th>Yds</th><th>TD</th><th>Lng</th></tr>{rush_rows}</table></div>
+<div style="margin-bottom:20px"><div class="eyebrow" style="margin-bottom:8px">// Receiving</div>
+<table class="sit-table"><tr><th style="text-align:left">Player</th><th>Rec</th><th>Yds</th><th>TD</th><th>Lng</th></tr>{rec_rows}</table></div>
 <div class="stitle">Down &amp; Distance Summary</div>
 <table class="sit-table">
   <tr><th style="text-align:left">Situation</th><th>Run%</th><th>Pass%</th><th style="text-align:left">Top Run</th><th style="text-align:left">Top Pass</th></tr>
