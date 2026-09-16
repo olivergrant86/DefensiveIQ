@@ -2758,6 +2758,7 @@ COLUMN_ALIASES = {
     "MOTION DIR":  ["MOTION DIR", "MOT DIR", "MOTIONDIR"],
     "SCORE":       ["SCORE", "SCORE DIFF", "SCORE DIFFERENTIAL", "MARGIN"],
     "SERIES":      ["SERIES", "DRIVE", "DRIVE #", "DRIVE NUM"],
+    "ACTION":      ["ACTION"],
     "FORM FAMILY": ["FORM FAMILY", "FORMATION FAMILY", "FAMILY"],
     "FIB":         ["FIB"],
     "PASSER":      ["OPP PASSER", "PASSER", "QB", "QUARTERBACK"],
@@ -2944,6 +2945,7 @@ def load_plays(df):
             'motion_dir': str(row.get('MOTION DIR', '')).strip().upper(),
             'score': score_v,
             'series': str(row.get('SERIES', '')).strip(),
+            'action': str(row.get('ACTION', '')).strip().upper() if str(row.get('ACTION', '')).strip().lower() not in ('', 'nan', 'none') else '',
             'play_num': row.get('PLAY #', ''),
         })
     return plays
@@ -4587,6 +4589,55 @@ def build_excel(plays, opp, week, date):
             sc(ws20, row, 3, ptxt, sz=9, bg=bg, h="left")
             ws20.merge_cells(start_row=row, start_column=5, end_row=row, end_column=6)
             sc(ws20, row, 5, ftxt, sz=9, bg=bg, h="left")
+            row += 1
+
+    row += 2
+    banner(ws20, row, "WHAT THEY CALL AFTER EACH SITUATION  \u2014  Punts, Scores, Turnovers & More", 6, bg=CB, sz=13, ht=26)
+    row += 1
+    ws20.merge_cells(start_row=row, start_column=1, end_row=row, end_column=6)
+    c = ws20.cell(row=row, column=1,
+                   value="Shows their very next offensive snap after each tagged situation \u2014 e.g. do they take shots right after a turnover?")
+    c.font = Font(name=FN, size=9, italic=True, color=CDG); c.alignment = Alignment(horizontal="center", vertical="center")
+    ws20.row_dimensions[row].height = 16
+    row += 1
+
+    def _action_label(code):
+        known = {'KO': 'Kickoff', 'SC': 'Score', 'TOD': 'Turnover on Downs',
+                 'INT': 'Interception', 'FUM': 'Fumble', 'SFTY': 'Safety', 'ONS': 'Onside Kick'}
+        if code in known:
+            return known[code]
+        if code.startswith('P') and code[1:].isdigit():
+            return f'Punt (to the {code[1:]})'
+        return code
+
+    action_next = {}
+    for i, p in enumerate(sorted_plays):
+        a = p.get('action', '')
+        if not a: continue
+        if i + 1 < len(sorted_plays):
+            action_next.setdefault(a, []).append(sorted_plays[i + 1])
+    action_ranked = sorted(action_next.items(), key=lambda kv: -len(kv[1]))
+
+    for c1, txt, bg in [(1, "AFTER A...", CTe), (2, "SNAPS", CTe), (3, "RUN%", CTe), (4, "PASS%", CTe),
+                       (5, "#1 NEXT CONCEPT", CTe), (6, "#2 NEXT CONCEPT", CTe)]:
+        hdr(ws20, row, c1, txt, bg=bg, sz=9, wrap=True)
+    row += 1
+    if not action_ranked:
+        ws20.merge_cells(start_row=row, start_column=1, end_row=row, end_column=6)
+        c = ws20.cell(row=row, column=1, value="No ACTION data tagged in this file.")
+        c.font = Font(name=FN, sz=10, italic=True, color=CDG); c.alignment = Alignment(horizontal="center")
+        row += 1
+    else:
+        for ri, (code, sp) in enumerate(action_ranked):
+            bg = CL if ri % 2 == 0 else CW
+            rn = len([p for p in sp if p['rp'] == 'Run']); pn = len(sp) - rn
+            top_c = top3(sp, 'concept', 2)
+            sc(ws20, row, 1, _action_label(code), bold=True, sz=9, fc="FF000000", bg=bg, h="left")
+            sc(ws20, row, 2, len(sp), sz=9, bg=bg, fmt="0")
+            sc(ws20, row, 3, round(rn / len(sp), 2) if sp else "", bold=True, sz=10, fc="FF8B0000", bg=bg, fmt="0%")
+            sc(ws20, row, 4, round(pn / len(sp), 2) if sp else "", bold=True, sz=10, fc="FF00008B", bg=bg, fmt="0%")
+            sc(ws20, row, 5, fmt_top(top_c, 0), sz=9, bg=bg, h="left")
+            sc(ws20, row, 6, fmt_top(top_c, 1), sz=9, bg=bg, h="left")
             row += 1
 
     ws20.freeze_panes = "A1"
