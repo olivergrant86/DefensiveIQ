@@ -2756,6 +2756,7 @@ COLUMN_ALIASES = {
     "PERSONNEL":   ["PERSONNEL", "PERS", "PERSONEL", "GROUPING"],
     "MOTION":      ["MOTION", "MOT"],
     "MOTION DIR":  ["MOTION DIR", "MOT DIR", "MOTIONDIR"],
+    "SCORE":       ["SCORE", "SCORE DIFF", "SCORE DIFFERENTIAL", "MARGIN"],
     "FORM FAMILY": ["FORM FAMILY", "FORMATION FAMILY", "FAMILY"],
     "FIB":         ["FIB"],
     "PASSER":      ["OPP PASSER", "PASSER", "QB", "QUARTERBACK"],
@@ -2907,6 +2908,7 @@ def load_plays(df):
         dn_v   = int(_num(row.get('DN', 0)))
         dist_v = _num(row.get('DIST', 0))
         gain_v = _num(row.get('GN/LS', 0))
+        score_v = _num(row.get('SCORE', 0))
         yl_v   = row.get('YARD LN', '')
         result = str(row.get('RESULT', '')).upper()
         is_td  = ('TD' in result) or ('TOUCHDOWN' in result)
@@ -2939,6 +2941,7 @@ def load_plays(df):
             'strong_weak': str(row.get('ST/WK', '')).strip().upper(),
             'motion': str(row.get('MOTION', '')).strip(),
             'motion_dir': str(row.get('MOTION DIR', '')).strip().upper(),
+            'score': score_v,
             'play_num': row.get('PLAY #', ''),
         })
     return plays
@@ -5658,6 +5661,8 @@ with cc2: team_accent = st.color_picker("Accent (highlights)", "#D2011A")
 st.markdown("---")
 uploaded = st.file_uploader("Upload Opponent Offensive Playlist (.xlsx or .csv)", type=['xlsx', 'xls', 'csv'],
                              help="Export the opponent's offensive playlist from Hudl as Excel or CSV and upload here.")
+score_filter = st.text_input("Only include plays within this score (optional)",
+                              placeholder="e.g. 21 — only breaks down plays with a score of 21 or less")
 
 if uploaded and st.button("🛡️ RUN ANALYSIS"):
     loading_ph = st.empty()
@@ -5688,6 +5693,15 @@ if uploaded and st.button("🛡️ RUN ANALYSIS"):
             st.stop()
 
         plays = load_plays(df)
+        if score_filter and score_filter.strip():
+            try:
+                max_score = float(score_filter.strip())
+                before_n = len(plays)
+                plays = [p for p in plays if p['score'] <= max_score]
+                st.info(f"Score filter applied: keeping plays with a score of {max_score:g} or less "
+                        f"— {len(plays)} of {before_n} plays included.")
+            except ValueError:
+                st.warning(f"\"{score_filter}\" isn't a number — ignoring the score filter for this run.")
         if len(plays) == 0:
             st.error("No Run/Pass plays found in this file.")
             st.info("Common causes: PLAY TYPE uses different words than 'Run'/'Pass', or YARD LN is blank. "
