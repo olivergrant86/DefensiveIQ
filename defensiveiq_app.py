@@ -4532,6 +4532,63 @@ def build_excel(plays, opp, week, date):
         sc(ws20, row, 5, fmt_top(top_c, 0), sz=9, bg=bg, h="left")
         sc(ws20, row, 6, fmt_top(top_c, 1), sz=9, bg=bg, h="left")
         row += 1
+    row += 2
+
+    banner(ws20, row, "OPENERS  \u2014  What They Call on the First Play of Each Drive", 6, bg=CB, sz=13, ht=26)
+    row += 1
+    drive_groups = {}
+    for p in plays:
+        s = p.get('series', '')
+        if not s: continue
+        drive_groups.setdefault(s, []).append(p)
+    openers = []
+    for s, dp in drive_groups.items():
+        dp_sorted = sorted(dp, key=_seq_num)
+        if dp_sorted:
+            openers.append(dp_sorted[0])
+    ws20.merge_cells(start_row=row, start_column=1, end_row=row, end_column=6)
+    c = ws20.cell(row=row, column=1, value=f"Based on {len(openers)} drives")
+    c.font = Font(name=FN, size=9, italic=True, color=CDG); c.alignment = Alignment(horizontal="center", vertical="center")
+    ws20.row_dimensions[row].height = 16
+    row += 1
+    if not openers:
+        ws20.merge_cells(start_row=row, start_column=1, end_row=row, end_column=6)
+        c = ws20.cell(row=row, column=1, value="No drive (SERIES) data tagged.")
+        c.font = Font(name=FN, sz=10, italic=True, color=CDG); c.alignment = Alignment(horizontal="center")
+        row += 1
+    else:
+        op_run = len([p for p in openers if p['rp'] == 'Run']); op_pass = len(openers) - op_run
+        top_run_c = top3([p for p in openers if p['rp'] == 'Run'], 'concept', 3)
+        top_pass_c = top3([p for p in openers if p['rp'] == 'Pass'], 'concept', 3)
+        top_form = top3(openers, 'form', 3)
+        for c1, txt, bg in [(1, "METRIC", CTe), (2, "SNAPS", CTe), (3, "RUN%", CTe), (4, "PASS%", CTe)]:
+            hdr(ws20, row, c1, txt, bg=bg, sz=9)
+        row += 1
+        sc(ws20, row, 1, "1st Play of Drive", bold=True, sz=9, fc="FF000000", bg=CL, h="left")
+        sc(ws20, row, 2, len(openers), sz=9, bg=CL, fmt="0")
+        sc(ws20, row, 3, round(op_run / len(openers), 2) if openers else "", bold=True, sz=10, fc="FF8B0000", bg=CL, fmt="0%")
+        sc(ws20, row, 4, round(op_pass / len(openers), 2) if openers else "", bold=True, sz=10, fc="FF00008B", bg=CL, fmt="0%")
+        row += 2
+        for c1, txt, bg in [(1, "TOP OPENER RUNS", CR), (3, "TOP OPENER PASSES", CBl),
+                           (5, "TOP OPENER FORMATIONS", "FF1A5276")]:
+            ws20.merge_cells(start_row=row, start_column=c1, end_row=row, end_column=c1 + 1)
+            cell = ws20.cell(row=row, column=c1, value=txt)
+            cell.font = Font(name=FN, bold=True, size=8, color=CW); cell.fill = fil(bg)
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+        row += 1
+        for i in range(3):
+            bg = CL if i % 2 == 0 else CW
+            rtxt = f"{top_run_c[i]['v']} ({top_run_c[i]['n']})" if i < len(top_run_c) else "\u2014"
+            ptxt = f"{top_pass_c[i]['v']} ({top_pass_c[i]['n']})" if i < len(top_pass_c) else "\u2014"
+            ftxt = f"{top_form[i]['v']} ({top_form[i]['n']})" if i < len(top_form) else "\u2014"
+            ws20.merge_cells(start_row=row, start_column=1, end_row=row, end_column=2)
+            sc(ws20, row, 1, rtxt, sz=9, bg=bg, h="left")
+            ws20.merge_cells(start_row=row, start_column=3, end_row=row, end_column=4)
+            sc(ws20, row, 3, ptxt, sz=9, bg=bg, h="left")
+            ws20.merge_cells(start_row=row, start_column=5, end_row=row, end_column=6)
+            sc(ws20, row, 5, ftxt, sz=9, bg=bg, h="left")
+            row += 1
+
     ws20.freeze_panes = "A1"
     print_friendly(ws20, repeat_rows=None, one_page=False)
 
