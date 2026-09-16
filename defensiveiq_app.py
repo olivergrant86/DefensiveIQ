@@ -4602,7 +4602,7 @@ def build_excel(plays, opp, week, date):
     row += 1
 
     def _action_label(code):
-        known = {'KO': 'Kickoff', 'SC': 'Sudden Change', 'TOD': 'Turnover on Downs',
+        known = {'KO': 'Kickoff', 'SC': 'Sudden Change', 'SCORE': 'Score', 'TOD': 'Turnover on Downs',
                  'INT': 'Interception', 'FUM': 'Fumble', 'SFTY': 'Safety', 'ONS': 'Onside Kick'}
         if code in known:
             return known[code]
