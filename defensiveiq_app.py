@@ -2754,7 +2754,8 @@ COLUMN_ALIASES = {
     "RESULT":      ["RESULT", "RES", "OUTCOME"],
     "QTR":         ["QTR", "QUARTER", "QT", "Q"],
     "PERSONNEL":   ["PERSONNEL", "PERS", "PERSONEL", "GROUPING"],
-    "MOTION":      ["MOTION", "MOT", "MOTION DIR"],
+    "MOTION":      ["MOTION", "MOT"],
+    "MOTION DIR":  ["MOTION DIR", "MOT DIR", "MOTIONDIR"],
     "FORM FAMILY": ["FORM FAMILY", "FORMATION FAMILY", "FAMILY"],
     "FIB":         ["FIB"],
     "PASSER":      ["OPP PASSER", "PASSER", "QB", "QUARTERBACK"],
@@ -2936,6 +2937,8 @@ def load_plays(df):
             'open_close': str(row.get('OPEN/CLOSE', '')).strip(),
             'field_boundary': str(row.get('FIELD/BOUNDARY', '')).strip().upper()[:1],
             'strong_weak': str(row.get('ST/WK', '')).strip().upper(),
+            'motion': str(row.get('MOTION', '')).strip(),
+            'motion_dir': str(row.get('MOTION DIR', '')).strip().upper(),
             'play_num': row.get('PLAY #', ''),
         })
     return plays
@@ -4371,6 +4374,41 @@ def build_excel(plays, opp, week, date):
             c = ws.cell(row=hdr_row + 1, column=1, value="Not enough backfield data tagged.")
             c.font = Font(name=FN, sz=10, italic=True, color=CDG); c.alignment = Alignment(horizontal="center")
 
+    def motion_direction_breakdown(ws, start_row):
+        """A second table on the same tab — run/pass tendency and top 3
+        run/pass plays by motion direction (only among snaps with motion)."""
+        NCb = 10
+        banner(ws, start_row, "MOTION DIRECTION  \u2014  Run/Pass Split & Favorite Plays (Motion Snaps Only)", NCb,
+               bg="FF6C3483", sz=13, ht=28)
+        hdr_row = start_row + 1
+        for c, txt, bg in [(1, "DIRECTION", CB), (2, "Snaps", CB), (3, "Run%", CB), (4, "Pass%", CB),
+                           (5, "#1 Run Play", CR), (6, "#2 Run Play", CR), (7, "#3 Run Play", CR),
+                           (8, "#1 Pass Play", CBl), (9, "#2 Pass Play", CBl), (10, "#3 Pass Play", CBl)]:
+            hdr(ws, hdr_row, c, txt, bg=bg, sz=8, wrap=True)
+        dir_labels = {'L': 'Motion Left', 'R': 'Motion Right'}
+        groups = {}
+        for p in plays:
+            if not p.get('motion'): continue
+            d = str(p.get('motion_dir', '')).strip()
+            if d not in ('L', 'R'): continue
+            groups.setdefault(dir_labels[d], []).append(p)
+        ranked = sorted(groups.items(), key=lambda kv: -len(kv[1]))
+        for ri, (v, g) in enumerate(ranked):
+            r = hdr_row + 1 + ri; ws.row_dimensions[r].height = 24
+            bg = CL if ri % 2 == 0 else CW
+            gr = [p for p in g if p['rp'] == 'Run']; gp = [p for p in g if p['rp'] == 'Pass']
+            sc(ws, r, 1, v, bold=True, sz=9, fc=CW, bg="FF6C3483", h="left")
+            sc(ws, r, 2, len(g), bold=True, sz=10, fc="FF000000", bg=bg, fmt="0")
+            sc(ws, r, 3, round(len(gr) / len(g), 2) if g else "", bold=True, sz=10, fc="FF8B0000", bg=CRB, fmt="0%")
+            sc(ws, r, 4, round(len(gp) / len(g), 2) if g else "", bold=True, sz=10, fc="FF00008B", bg=CPB, fmt="0%")
+            t3rc = top3_str(gr, 'concept', 3); t3pc = top3_str(gp, 'concept', 3)
+            for i, cn in enumerate([5, 6, 7]): sc(ws, r, cn, t3rc[i], sz=9, bg=CRB, wrap=True)
+            for i, cn in enumerate([8, 9, 10]): sc(ws, r, cn, t3pc[i], sz=9, bg=CPB, wrap=True)
+        if not ranked:
+            ws.merge_cells(f"A{hdr_row+1}:{gcl(NCb)}{hdr_row+1}")
+            c = ws.cell(row=hdr_row + 1, column=1, value="No motion direction data tagged.")
+            c.font = Font(name=FN, sz=10, italic=True, color=CDG); c.alignment = Alignment(horizontal="center")
+
     ws13 = wb2.create_sheet("13. Form Family Tendencies")
     group_tab(ws13, 'form_family', "FORM FAMILY TENDENCIES  \u2014  Run/Pass Split, Favorite Plays & Formations",
               "FF6C3483", "6C3483")
@@ -4383,6 +4421,11 @@ def build_excel(plays, opp, week, date):
     _bd_last_row = group_tab(ws14b, 'back_depth', "BACK DEPTH TENDENCIES  \u2014  Run/Pass Split, Favorite Plays & Formations",
               "FF0E7060", "0E7060", empty_label="(Blank)")
     backfield_breakdown(ws14b, _bd_last_row + 2)
+
+    ws14c = wb2.create_sheet("20. Motion Tendencies")
+    _mot_last_row = group_tab(ws14c, 'motion', "MOTION TENDENCIES  \u2014  Run/Pass Split, Favorite Plays & Formations",
+              "FF6C3483", "6C3483", empty_label="(No Motion)")
+    motion_direction_breakdown(ws14c, _mot_last_row + 2)
 
     # ── Tab 16: Open/Closed (with cross-break by Form Family) ─
     ws14c = wb2.create_sheet("16. Open-Closed")
@@ -5455,6 +5498,7 @@ def build_excel(plays, opp, week, date):
         ("1. Film Log", "20. Film Log"),
         ("20. Ball Carrier Tendencies", "21. Ball Carrier Tendencies"),
         ("21. Wristband Card", "22. Wristband Card"),
+        ("20. Motion Tendencies", "23. Motion Tendencies"),
     ]
     for old_name, new_name in _new_order:
         wb2[old_name].title = new_name
