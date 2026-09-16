@@ -5286,59 +5286,74 @@ def build_excel(plays, opp, week, date):
     # ── Tab 21: Wristband Card ───────────────────────────────────
     ws19 = wb2.create_sheet("21. Wristband Card")
     ws19.sheet_properties.tabColor = "D2011A"; ws19.sheet_view.showGridLines = False
-    widths(ws19, [4] * 3)
-    for r in range(1, 26):
-        ws19.row_dimensions[r].height = 18
-    ws19.merge_cells("A1:C1")
-    c = ws19.cell(row=1, column=1, value=(opp or "Opponent").upper())
-    c.font = Font(name=FN, bold=True, size=9, color=CW)
+    WB_COL_CHARS = 26
+    widths(ws19, [WB_COL_CHARS])
+
+    def _wb_row_height(text, sz=8):
+        """Enough row height for wrapped text at this column width and font
+        size so a long line never overlaps the row below it."""
+        chars_per_line = max(6, int(WB_COL_CHARS * 1.7))
+        n_lines = max(1, -(-len(text) // chars_per_line))
+        return max(16, n_lines * (sz + 8))
+
+    row = 1
+    title_txt = (opp or "Opponent").upper()
+    ws19.merge_cells(f"A{row}:A{row}")
+    c = ws19.cell(row=row, column=1, value=title_txt)
+    c.font = Font(name=FN, bold=True, size=11, color=CW)
     c.fill = fil(CB); c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    ws19.row_dimensions[1].height = 30
+    ws19.row_dimensions[row].height = _wb_row_height(title_txt, 11)
+    row += 1
+
     total = len(plays)
     run_n = len([p for p in plays if p['rp'] == 'Run'])
     pass_n = total - run_n
-    ws19.merge_cells("A2:C2")
-    c = ws19.cell(row=2, column=1, value=f"{pct(run_n, total)}% RUN  /  {pct(pass_n, total)}% PASS  ({total} snaps)")
-    c.font = Font(name=FN, bold=True, size=8, color="FF555555")
-    c.alignment = Alignment(horizontal="center", vertical="center")
-    row = 3
-    ws19.merge_cells(f"A{row}:C{row}")
+    rp_txt = f"{pct(run_n, total)}% RUN  /  {pct(pass_n, total)}% PASS  ({total} snaps)"
+    c = ws19.cell(row=row, column=1, value=rp_txt)
+    c.font = Font(name=FN, bold=True, size=9, color="FF555555")
+    c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    ws19.row_dimensions[row].height = _wb_row_height(rp_txt, 9)
+    row += 1
+
     c = ws19.cell(row=row, column=1, value="TENDENCIES")
-    c.font = Font(name=FN, bold=True, size=8, color=CW)
+    c.font = Font(name=FN, bold=True, size=9, color=CW)
     c.fill = fil("FF8B0000"); c.alignment = Alignment(horizontal="center", vertical="center")
+    ws19.row_dimensions[row].height = 20
     row += 1
     biggest = compute_biggest_tendencies(plays, top_n=10)
     if not biggest:
-        ws19.merge_cells(f"A{row}:C{row}")
         c = ws19.cell(row=row, column=1, value="Not enough tagged data.")
-        c.font = Font(name=FN, sz=8, italic=True, color=CDG); c.alignment = Alignment(horizontal="center")
+        c.font = Font(name=FN, size=8, italic=True, color=CDG); c.alignment = Alignment(horizontal="center")
+        ws19.row_dimensions[row].height = 16
         row += 1
     else:
         for i, t in enumerate(biggest, 1):
-            ws19.merge_cells(f"A{row}:C{row}")
-            c = ws19.cell(row=row, column=1, value=f"{i}. {t}")
+            txt = f"{i}. {t}"
+            c = ws19.cell(row=row, column=1, value=txt)
             c.font = Font(name=FN, bold=True, size=8, color="FF000000")
             c.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
-            ws19.row_dimensions[row].height = 26
+            ws19.row_dimensions[row].height = _wb_row_height(txt, 8)
             row += 1
     row += 1
-    ws19.merge_cells(f"A{row}:C{row}")
+
     c = ws19.cell(row=row, column=1, value="FORMATIONS")
-    c.font = Font(name=FN, bold=True, size=8, color=CW)
+    c.font = Font(name=FN, bold=True, size=9, color=CW)
     c.fill = fil("FF1A5276"); c.alignment = Alignment(horizontal="center", vertical="center")
+    ws19.row_dimensions[row].height = 20
     row += 1
     top_forms = top3(plays, 'form', 5)
     if not top_forms:
-        ws19.merge_cells(f"A{row}:C{row}")
         c = ws19.cell(row=row, column=1, value="\u2014")
-        c.font = Font(name=FN, sz=8, color=CDG); c.alignment = Alignment(horizontal="center")
+        c.font = Font(name=FN, size=8, color=CDG); c.alignment = Alignment(horizontal="center")
+        ws19.row_dimensions[row].height = 16
         row += 1
     else:
         for x in top_forms:
-            ws19.merge_cells(f"A{row}:C{row}")
-            c = ws19.cell(row=row, column=1, value=f"{x['v']} ({x['n']})")
+            txt = f"{x['v']} ({x['n']})"
+            c = ws19.cell(row=row, column=1, value=txt)
             c.font = Font(name=FN, bold=True, size=8, color="FF000000")
-            c.alignment = Alignment(horizontal="left", vertical="center")
+            c.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+            ws19.row_dimensions[row].height = _wb_row_height(txt, 8)
             row += 1
     ws19.page_setup.orientation = "portrait"
     ws19.page_setup.fitToPage = True; ws19.page_setup.fitToWidth = 1; ws19.page_setup.fitToHeight = 1
