@@ -5115,8 +5115,12 @@ def build_excel(plays, opp, week, date):
     rep_counter = 0
     for label, fn, n_reps in buckets:
         bucket_plays = [p for p in plays if fn(p)]
+        _run_n = len([p for p in bucket_plays if p['rp'] == 'Run'])
+        _run_pct = round(_run_n / len(bucket_plays) * 100) if bucket_plays else 0
+        _pass_pct = 100 - _run_pct if bucket_plays else 0
         ws16.merge_cells(start_row=row, start_column=1, end_row=row, end_column=NC16)
-        _lbl = ws16.cell(row=row, column=1, value=f"  {label}  ({len(bucket_plays)} snaps tagged, {n_reps} reps)")
+        _lbl = ws16.cell(row=row, column=1,
+                          value=f"  {label}  ({len(bucket_plays)} snaps tagged, {n_reps} reps, {_run_pct}% Run / {_pass_pct}% Pass)")
         _lbl.font = Font(name=FN, bold=True, size=9, color=CW)
         _lbl.fill = fil("FF4A235A")
         _lbl.alignment = Alignment(horizontal="left", vertical="center")
@@ -5172,8 +5176,12 @@ def build_excel(plays, opp, week, date):
     rz_rep_counter = 0
     for label, fn, n_reps in rz_buckets:
         bucket_plays = [p for p in plays if fn(p)]
+        _run_n = len([p for p in bucket_plays if p['rp'] == 'Run'])
+        _run_pct = round(_run_n / len(bucket_plays) * 100) if bucket_plays else 0
+        _pass_pct = 100 - _run_pct if bucket_plays else 0
         ws16.merge_cells(start_row=row, start_column=1, end_row=row, end_column=NC16)
-        _lbl = ws16.cell(row=row, column=1, value=f"  {label}  ({len(bucket_plays)} snaps tagged, {n_reps} reps)")
+        _lbl = ws16.cell(row=row, column=1,
+                          value=f"  {label}  ({len(bucket_plays)} snaps tagged, {n_reps} reps, {_run_pct}% Run / {_pass_pct}% Pass)")
         _lbl.font = Font(name=FN, bold=True, size=9, color=CW)
         _lbl.fill = fil("FF4A235A")
         _lbl.alignment = Alignment(horizontal="left", vertical="center")
