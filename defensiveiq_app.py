@@ -5241,6 +5241,110 @@ def build_excel(plays, opp, week, date):
     ws17.cell(row=row + 2, column=1, value="Green = not FIB'd").font = Font(name=FN, italic=True, size=9, color=GREEN_TXT)
     print_friendly(ws17, repeat_rows=None, one_page=False, exact_scale_pct=exact_scale_pct)
 
+    # ── Tab 20: Ball Carrier Tendencies ──────────────────────────
+    ws18 = wb2.create_sheet("20. Ball Carrier Tendencies")
+    ws18.sheet_properties.tabColor = "0E7060"; ws18.sheet_view.showGridLines = False
+    widths(ws18, [12, 10, 10, 10, 22, 22, 10, 10])
+    banner(ws18, 1, "BALL CARRIER TENDENCIES  \u2014  Run Plays Only (not tagged on pass snaps)", 8, bg=CB, sz=13, ht=26)
+    for c, txt, bg in [(1, "PLAYER", CTe), (2, "CARRIES", CTe), (3, "AVG YDS", CTe), (4, "LONG", CTe),
+                       (5, "#1 CONCEPT", CTe), (6, "#2 CONCEPT", CTe), (7, "DIR L%", CTe), (8, "DIR R%", CTe)]:
+        hdr(ws18, 2, c, txt, bg=bg, sz=9, wrap=True)
+    bc_groups = {}
+    for p in plays:
+        if p['rp'] != 'Run': continue
+        j = _jersey(p.get('rusher', ''))
+        if not j: continue
+        bc_groups.setdefault(j, []).append(p)
+    bc_ranked = sorted(bc_groups.items(), key=lambda kv: -len(kv[1]))
+    row = 3
+    if not bc_ranked:
+        ws18.merge_cells(start_row=row, start_column=1, end_row=row, end_column=8)
+        c = ws18.cell(row=row, column=1, value="No rusher jersey numbers tagged in this file.")
+        c.font = Font(name=FN, sz=10, italic=True, color=CDG); c.alignment = Alignment(horizontal="center")
+        row += 1
+    else:
+        for ri, (jersey, sp) in enumerate(bc_ranked):
+            bg = CL if ri % 2 == 0 else CW
+            yds = [p['gnls'] for p in sp]
+            avg_yds = round(sum(yds) / len(yds), 1) if yds else 0
+            long_run = max(yds) if yds else 0
+            top_c = top3(sp, 'concept', 2)
+            l_ct = len([p for p in sp if p['dir'] == 'L']); r_ct = len([p for p in sp if p['dir'] == 'R'])
+            dir_total = l_ct + r_ct
+            sc(ws18, row, 1, jersey, bold=True, sz=10, fc="FF000000", bg=bg, h="left")
+            sc(ws18, row, 2, len(sp), bold=True, sz=10, fc="FF000000", bg=bg, fmt="0")
+            sc(ws18, row, 3, avg_yds, sz=9, bg=bg, fmt="0.0")
+            sc(ws18, row, 4, long_run, sz=9, bg=bg, fmt="0")
+            sc(ws18, row, 5, fmt_top(top_c, 0), sz=9, bg=bg, h="left")
+            sc(ws18, row, 6, fmt_top(top_c, 1), sz=9, bg=bg, h="left")
+            sc(ws18, row, 7, round(l_ct / dir_total, 2) if dir_total else "", sz=9, bg=bg, fmt="0%")
+            sc(ws18, row, 8, round(r_ct / dir_total, 2) if dir_total else "", sz=9, bg=bg, fmt="0%")
+            row += 1
+    ws18.freeze_panes = "A3"
+    print_friendly(ws18, repeat_rows="1:2")
+
+    # ── Tab 21: Wristband Card ───────────────────────────────────
+    ws19 = wb2.create_sheet("21. Wristband Card")
+    ws19.sheet_properties.tabColor = "D2011A"; ws19.sheet_view.showGridLines = False
+    widths(ws19, [4] * 3)
+    for r in range(1, 26):
+        ws19.row_dimensions[r].height = 18
+    ws19.merge_cells("A1:C1")
+    c = ws19.cell(row=1, column=1, value=(opp or "Opponent").upper())
+    c.font = Font(name=FN, bold=True, size=9, color=CW)
+    c.fill = fil(CB); c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    ws19.row_dimensions[1].height = 30
+    total = len(plays)
+    run_n = len([p for p in plays if p['rp'] == 'Run'])
+    pass_n = total - run_n
+    ws19.merge_cells("A2:C2")
+    c = ws19.cell(row=2, column=1, value=f"{pct(run_n, total)}% RUN  /  {pct(pass_n, total)}% PASS  ({total} snaps)")
+    c.font = Font(name=FN, bold=True, size=8, color="FF555555")
+    c.alignment = Alignment(horizontal="center", vertical="center")
+    row = 3
+    ws19.merge_cells(f"A{row}:C{row}")
+    c = ws19.cell(row=row, column=1, value="TENDENCIES")
+    c.font = Font(name=FN, bold=True, size=8, color=CW)
+    c.fill = fil("FF8B0000"); c.alignment = Alignment(horizontal="center", vertical="center")
+    row += 1
+    biggest = compute_biggest_tendencies(plays, top_n=10)
+    if not biggest:
+        ws19.merge_cells(f"A{row}:C{row}")
+        c = ws19.cell(row=row, column=1, value="Not enough tagged data.")
+        c.font = Font(name=FN, sz=8, italic=True, color=CDG); c.alignment = Alignment(horizontal="center")
+        row += 1
+    else:
+        for i, t in enumerate(biggest, 1):
+            ws19.merge_cells(f"A{row}:C{row}")
+            c = ws19.cell(row=row, column=1, value=f"{i}. {t}")
+            c.font = Font(name=FN, bold=True, size=8, color="FF000000")
+            c.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+            ws19.row_dimensions[row].height = 26
+            row += 1
+    row += 1
+    ws19.merge_cells(f"A{row}:C{row}")
+    c = ws19.cell(row=row, column=1, value="FORMATIONS")
+    c.font = Font(name=FN, bold=True, size=8, color=CW)
+    c.fill = fil("FF1A5276"); c.alignment = Alignment(horizontal="center", vertical="center")
+    row += 1
+    top_forms = top3(plays, 'form', 5)
+    if not top_forms:
+        ws19.merge_cells(f"A{row}:C{row}")
+        c = ws19.cell(row=row, column=1, value="\u2014")
+        c.font = Font(name=FN, sz=8, color=CDG); c.alignment = Alignment(horizontal="center")
+        row += 1
+    else:
+        for x in top_forms:
+            ws19.merge_cells(f"A{row}:C{row}")
+            c = ws19.cell(row=row, column=1, value=f"{x['v']} ({x['n']})")
+            c.font = Font(name=FN, bold=True, size=8, color="FF000000")
+            c.alignment = Alignment(horizontal="left", vertical="center")
+            row += 1
+    ws19.page_setup.orientation = "portrait"
+    ws19.page_setup.fitToPage = True; ws19.page_setup.fitToWidth = 1; ws19.page_setup.fitToHeight = 1
+    ws19.page_margins.left = 0.3; ws19.page_margins.right = 0.3
+    ws19.page_margins.top = 0.3; ws19.page_margins.bottom = 0.3
+
     # ── Cover Tab (inserted first) ─────────────────────────────
     ws_cov = wb2.create_sheet("0. Cover", 0)
     ws_cov.sheet_properties.tabColor = "D2011A"
@@ -5334,6 +5438,8 @@ def build_excel(plays, opp, week, date):
         ("10. Situational Summary", "18. Situational Summary"),
         ("11. Call Sheet Builder", "19. Call Sheet Builder"),
         ("1. Film Log", "20. Film Log"),
+        ("20. Ball Carrier Tendencies", "21. Ball Carrier Tendencies"),
+        ("21. Wristband Card", "22. Wristband Card"),
     ]
     for old_name, new_name in _new_order:
         wb2[old_name].title = new_name
