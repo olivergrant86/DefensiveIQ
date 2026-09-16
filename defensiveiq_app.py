@@ -4611,11 +4611,10 @@ def build_excel(plays, opp, week, date):
         return code
 
     action_next = {}
-    for i, p in enumerate(sorted_plays):
+    for p in sorted_plays:
         a = p.get('action', '')
         if not a: continue
-        if i + 1 < len(sorted_plays):
-            action_next.setdefault(a, []).append(sorted_plays[i + 1])
+        action_next.setdefault(a, []).append(p)
     action_ranked = sorted(action_next.items(), key=lambda kv: -len(kv[1]))
 
     for c1, txt, bg in [(1, "AFTER A...", CTe), (2, "SNAPS", CTe), (3, "RUN%", CTe), (4, "PASS%", CTe),
