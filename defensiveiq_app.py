@@ -2757,6 +2757,7 @@ COLUMN_ALIASES = {
     "MOTION":      ["MOTION", "MOT"],
     "MOTION DIR":  ["MOTION DIR", "MOT DIR", "MOTIONDIR"],
     "SCORE":       ["SCORE", "SCORE DIFF", "SCORE DIFFERENTIAL", "MARGIN"],
+    "SERIES":      ["SERIES", "DRIVE", "DRIVE #", "DRIVE NUM"],
     "FORM FAMILY": ["FORM FAMILY", "FORMATION FAMILY", "FAMILY"],
     "FIB":         ["FIB"],
     "PASSER":      ["OPP PASSER", "PASSER", "QB", "QUARTERBACK"],
@@ -2942,6 +2943,7 @@ def load_plays(df):
             'motion': str(row.get('MOTION', '')).strip(),
             'motion_dir': str(row.get('MOTION DIR', '')).strip().upper(),
             'score': score_v,
+            'series': str(row.get('SERIES', '')).strip(),
             'play_num': row.get('PLAY #', ''),
         })
     return plays
@@ -4430,6 +4432,109 @@ def build_excel(plays, opp, week, date):
               "FF6C3483", "6C3483", empty_label="(No Motion)")
     motion_direction_breakdown(ws14c, _mot_last_row + 2)
 
+    # ── Tab: Sequencing & Response Tendencies ────────────────────
+    ws20 = wb2.create_sheet("20b. Sequencing & Response")
+    ws20.sheet_properties.tabColor = "4A235A"; ws20.sheet_view.showGridLines = False
+    widths(ws20, [38, 12, 14, 14, 26, 18])
+
+    def _seq_num(p):
+        try:
+            return float(p.get('play_num', 0))
+        except (TypeError, ValueError):
+            return 0.0
+
+    sorted_plays = sorted(plays, key=_seq_num)
+    same_drive_pairs = []
+    for i in range(len(sorted_plays) - 1):
+        a, b = sorted_plays[i], sorted_plays[i + 1]
+        if a['series'] and a['series'] == b['series']:
+            same_drive_pairs.append((a, b))
+
+    row = 1
+    banner(ws20, row, "PLAY-TO-PLAY SEQUENCING  \u2014  Back-to-Back Tendencies (Same Drive Only)", 6, bg=CB, sz=13, ht=26)
+    row += 1
+    ws20.merge_cells(start_row=row, start_column=1, end_row=row, end_column=6)
+    c = ws20.cell(row=row, column=1, value=f"Based on {len(same_drive_pairs)} back-to-back snap pairs within the same drive")
+    c.font = Font(name=FN, size=9, italic=True, color=CDG); c.alignment = Alignment(horizontal="center", vertical="center")
+    ws20.row_dimensions[row].height = 16
+    row += 1
+
+    concept_pairs = [(a, b) for a, b in same_drive_pairs
+                      if str(a['concept']).strip() not in ('', 'nan', 'None') and str(b['concept']).strip() not in ('', 'nan', 'None')]
+    same_concept_n = len([1 for a, b in concept_pairs if a['concept'] == b['concept']])
+    for c1, txt, bg in [(1, "METRIC", CTe), (2, "SNAPS", CTe), (3, "VALUE", CTe)]:
+        hdr(ws20, row, c1, txt, bg=bg, sz=9)
+    row += 1
+    sc(ws20, row, 1, "Same Concept Called Again (next snap)", bold=True, sz=9, fc="FF000000", bg=CL, h="left")
+    sc(ws20, row, 2, len(concept_pairs), sz=9, bg=CL, fmt="0")
+    sc(ws20, row, 3, round(same_concept_n / len(concept_pairs), 2) if concept_pairs else "", bold=True, sz=10, fc="FF4A235A", bg=CL, fmt="0%")
+    row += 2
+
+    ws20.merge_cells(start_row=row, start_column=1, end_row=row, end_column=6)
+    c = ws20.cell(row=row, column=1, value="RUN / PASS TRANSITIONS \u2014 What Follows Each Call Type")
+    c.font = Font(name=FN, bold=True, size=10, color=CW)
+    c.fill = fil("FF6C3483"); c.alignment = Alignment(horizontal="center", vertical="center")
+    row += 1
+    for c1, txt, bg in [(1, "AFTER A...", CTe), (2, "SNAPS", CTe), (3, "% RUN NEXT", CTe), (4, "% PASS NEXT", CTe)]:
+        hdr(ws20, row, c1, txt, bg=bg, sz=9)
+    row += 1
+    for lbl, rp_filter in [("Run", "Run"), ("Pass", "Pass")]:
+        following = [b for a, b in same_drive_pairs if a['rp'] == rp_filter]
+        fr = len([p for p in following if p['rp'] == 'Run']); fp = len([p for p in following if p['rp'] == 'Pass'])
+        bg = CL if lbl == "Run" else CW
+        sc(ws20, row, 1, lbl, bold=True, sz=9, fc="FF000000", bg=bg, h="left")
+        sc(ws20, row, 2, len(following), sz=9, bg=bg, fmt="0")
+        sc(ws20, row, 3, round(fr / len(following), 2) if following else "", bold=True, sz=10, fc="FF8B0000", bg=bg, fmt="0%")
+        sc(ws20, row, 4, round(fp / len(following), 2) if following else "", bold=True, sz=10, fc="FF00008B", bg=bg, fmt="0%")
+        row += 1
+    row += 1
+
+    ws20.merge_cells(start_row=row, start_column=1, end_row=row, end_column=6)
+    c = ws20.cell(row=row, column=1, value="RUN DIRECTION SEQUENCING \u2014 Same Direction vs. Misdirection")
+    c.font = Font(name=FN, bold=True, size=10, color=CW)
+    c.fill = fil("FF1A5276"); c.alignment = Alignment(horizontal="center", vertical="center")
+    row += 1
+    for c1, txt, bg in [(1, "METRIC", CTe), (2, "SNAPS", CTe), (3, "VALUE", CTe)]:
+        hdr(ws20, row, c1, txt, bg=bg, sz=9)
+    row += 1
+    run_run_pairs = [(a, b) for a, b in same_drive_pairs
+                      if a['rp'] == 'Run' and b['rp'] == 'Run' and a['dir'] in ('L', 'R') and b['dir'] in ('L', 'R')]
+    same_dir_n = len([1 for a, b in run_run_pairs if a['dir'] == b['dir']])
+    sc(ws20, row, 1, "Same Direction Again (Run \u2192 Run)", bold=True, sz=9, fc="FF000000", bg=CL, h="left")
+    sc(ws20, row, 2, len(run_run_pairs), sz=9, bg=CL, fmt="0")
+    sc(ws20, row, 3, round(same_dir_n / len(run_run_pairs), 2) if run_run_pairs else "", bold=True, sz=10, fc="FF1A5276", bg=CL, fmt="0%")
+    row += 1
+    sc(ws20, row, 1, "Flipped Direction (Misdirection)", bold=True, sz=9, fc="FF000000", bg=CW, h="left")
+    sc(ws20, row, 2, len(run_run_pairs), sz=9, bg=CW, fmt="0")
+    sc(ws20, row, 3, round(1 - same_dir_n / len(run_run_pairs), 2) if run_run_pairs else "", bold=True, sz=10, fc="FF1A5276", bg=CW, fmt="0%")
+    row += 2
+
+    banner(ws20, row, "WHAT THEY CALL NEXT  \u2014  Response to Explosive Gains & Negative Plays", 6, bg=CB, sz=13, ht=26)
+    row += 1
+    for c1, txt, bg in [(1, "SITUATION", CTe), (2, "SNAPS", CTe), (3, "RUN%", CTe), (4, "PASS%", CTe),
+                       (5, "#1 NEXT CONCEPT", CTe), (6, "#2 NEXT CONCEPT", CTe)]:
+        hdr(ws20, row, c1, txt, bg=bg, sz=9, wrap=True)
+    row += 1
+    overall_run_n = len([p for p in plays if p['rp'] == 'Run'])
+    resp_groups = [
+        ("After Explosive Gain", [b for a, b in same_drive_pairs if a['expl']]),
+        ("After Negative/Stopped Play", [b for a, b in same_drive_pairs if a['gnls'] < 0]),
+        ("Overall Baseline (all snaps)", plays),
+    ]
+    for ri, (lbl, sp) in enumerate(resp_groups):
+        bg = CL if ri % 2 == 0 else CW
+        rn = len([p for p in sp if p['rp'] == 'Run']); pn = len(sp) - rn
+        top_c = top3(sp, 'concept', 2)
+        sc(ws20, row, 1, lbl, bold=True, sz=9, fc="FF000000", bg=bg, h="left")
+        sc(ws20, row, 2, len(sp), sz=9, bg=bg, fmt="0")
+        sc(ws20, row, 3, round(rn / len(sp), 2) if sp else "", bold=True, sz=10, fc="FF8B0000", bg=bg, fmt="0%")
+        sc(ws20, row, 4, round(pn / len(sp), 2) if sp else "", bold=True, sz=10, fc="FF00008B", bg=bg, fmt="0%")
+        sc(ws20, row, 5, fmt_top(top_c, 0), sz=9, bg=bg, h="left")
+        sc(ws20, row, 6, fmt_top(top_c, 1), sz=9, bg=bg, h="left")
+        row += 1
+    ws20.freeze_panes = "A1"
+    print_friendly(ws20, repeat_rows=None, one_page=False)
+
     # ── Tab 16: Open/Closed (with cross-break by Form Family) ─
     ws14c = wb2.create_sheet("16. Open-Closed")
 
@@ -5478,6 +5583,9 @@ def build_excel(plays, opp, week, date):
             )
 
     # ── Final tab order & renumbering ────────────────────────────
+    for _del_name in ("10. Situational Summary", "11. Call Sheet Builder", "21. Wristband Card"):
+        wb2.remove(wb2[_del_name])
+
     _new_order = [
         ("0. Cover", "1. Cover"),
         ("18. Practice Scripts", "2. Practice Scripts"),
@@ -5490,18 +5598,16 @@ def build_excel(plays, opp, week, date):
         ("14. FIB Tendencies", "9. FIB Tendencies"),
         ("16. Open-Closed", "10. Open-Closed"),
         ("15. Back Depth", "11. Back Depth"),
-        ("17. Stats", "12. Stats"),
-        ("12. Game Day Call Sheet", "13. Game Day Call Sheet"),
-        ("3. Run Tendencies", "14. Run Tendencies"),
-        ("4. Pass Tendencies", "15. Pass Tendencies"),
-        ("5. Hash Tendencies", "16. Hash Tendencies"),
-        ("2. Field Zone Tendencies", "17. Field Zone Tendencies"),
-        ("10. Situational Summary", "18. Situational Summary"),
-        ("11. Call Sheet Builder", "19. Call Sheet Builder"),
+        ("20. Motion Tendencies", "12. Motion Tendencies"),
+        ("20b. Sequencing & Response", "13. Sequencing & Response"),
+        ("17. Stats", "14. Stats"),
+        ("12. Game Day Call Sheet", "15. Game Day Call Sheet"),
+        ("3. Run Tendencies", "16. Run Tendencies"),
+        ("4. Pass Tendencies", "17. Pass Tendencies"),
+        ("5. Hash Tendencies", "18. Hash Tendencies"),
+        ("2. Field Zone Tendencies", "19. Field Zone Tendencies"),
         ("1. Film Log", "20. Film Log"),
         ("20. Ball Carrier Tendencies", "21. Ball Carrier Tendencies"),
-        ("21. Wristband Card", "22. Wristband Card"),
-        ("20. Motion Tendencies", "23. Motion Tendencies"),
     ]
     for old_name, new_name in _new_order:
         wb2[old_name].title = new_name
