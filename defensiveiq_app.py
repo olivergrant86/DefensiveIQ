@@ -5865,9 +5865,9 @@ def build_excel(plays, opp, week, date):
     _accent_cell.fill = fil("FFD2011A")
 
     # Logo, moved to the left to make room for the table of contents
-    _cov_logo = XLImage(_oklahoma_logo_stream())
-    _cov_logo.width, _cov_logo.height = 260, 157
-    ws_cov.add_image(_cov_logo, "B4")
+    _cov_logo = XLImage(_logo_stream())
+    _cov_logo.width, _cov_logo.height = 380, 362
+    ws_cov.add_image(_cov_logo, "B3")
 
     # Table of contents, to the right of the logo, one hyperlinked line per tab
     TOC_ENTRIES = [
