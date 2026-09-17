@@ -2961,22 +2961,23 @@ def dd_bucket(p):
     dn, dist = p['dn'], p['dist']
     if dn == 1: return "1st & 10" if dist >= 8 else "1st & Short"
     if dn == 2:
-        if dist >= 7: return "2nd & Long"
-        if dist >= 4: return "2nd & Medium"
-        return "2nd & Short"
+        if dist >= 7: return "2nd & 7+ Yds"
+        if dist >= 4: return "2nd & 4-6 Yds"
+        return "2nd & 1-3 Yds"
     if dn == 3:
-        if dist >= 7: return "3rd & Long"
-        if dist >= 4: return "3rd & Medium"
-        return "3rd & Short"
+        if dist >= 12: return "3rd & 12+ Yds"
+        if dist >= 7: return "3rd & 7-11 Yds"
+        if dist >= 3: return "3rd & 3-6 Yds"
+        return "3rd & 1-2 Yds"
     if dn == 4: return "4th Down"
     return "—"
 
 DD_SITS = [
     ("1ST & 10",      lambda p: p['dn'] == 1 and p['dist'] >= 8),
     ("1ST & SHORT",   lambda p: p['dn'] == 1 and p['dist'] < 8),
-    ("2ND & LONG",    lambda p: p['dn'] == 2 and p['dist'] >= 7),
-    ("2ND & MEDIUM",  lambda p: p['dn'] == 2 and 4 <= p['dist'] <= 6),
-    ("2ND & SHORT",   lambda p: p['dn'] == 2 and p['dist'] <= 3),
+    ("2ND & 7+ YARDS",   lambda p: p['dn'] == 2 and p['dist'] >= 7),
+    ("2ND & 4-6 YARDS",  lambda p: p['dn'] == 2 and 4 <= p['dist'] <= 6),
+    ("2ND & 1-3 YARDS",  lambda p: p['dn'] == 2 and p['dist'] <= 3),
     ("3RD & 12+ YARDS",  lambda p: p['dn'] == 3 and p['dist'] >= 12),
     ("3RD & 7-11 YARDS", lambda p: p['dn'] == 3 and 7 <= p['dist'] <= 11),
     ("3RD & 3-6 YARDS",  lambda p: p['dn'] == 3 and 3 <= p['dist'] <= 6),
@@ -4222,8 +4223,8 @@ def build_excel(plays, opp, week, date):
     for ci, h in enumerate(["Situation", "Run%", "Pass%", "Top Run", "Top Pass", "Form"], 1):
         hdr(ws12, r, ci, h, bg=CB, sz=8)
     r += 1
-    dd_top_sits = [("1st & 10", DD_SITS[0][1]), ("2nd & Short", DD_SITS[4][1]), ("2nd & Med", DD_SITS[3][1]),
-                   ("2nd & Long", DD_SITS[2][1]), ("3rd & 1-2", DD_SITS[8][1]), ("3rd & 3-6", DD_SITS[7][1]),
+    dd_top_sits = [("1st & 10", DD_SITS[0][1]), ("2nd & 1-3", DD_SITS[4][1]), ("2nd & 4-6", DD_SITS[3][1]),
+                   ("2nd & 7+", DD_SITS[2][1]), ("3rd & 1-2", DD_SITS[8][1]), ("3rd & 3-6", DD_SITS[7][1]),
                    ("3rd & 7-11", DD_SITS[6][1]), ("4th Down", DD_SITS[9][1])]
     for ri, (lbl, fn) in enumerate(dd_top_sits):
         bg = CL if ri % 2 == 0 else CW
