@@ -4642,25 +4642,24 @@ def build_excel(plays, opp, week, date):
     ws20.freeze_panes = "A1"
     print_friendly(ws20, repeat_rows=None, one_page=False)
 
-    # ── Tab: High-Confidence Tendencies (75%+) ────────────────────
+    # ── Tab: High-Confidence Tendencies (biggest swings from baseline) ──
     ws21 = wb2.create_sheet("21b. High-Confidence Tendencies")
     ws21.sheet_properties.tabColor = "D2011A"; ws21.sheet_view.showGridLines = False
-    widths(ws21, [22, 26, 10, 12, 10, 26])
-    THRESH = 0.75
+    widths(ws21, [22, 26, 10, 10, 14, 18, 26])
     MIN_N = 5
+    MIN_SWING = 0.15
+    baseline_run_pct = (len([p for p in plays if p['rp'] == 'Run']) / len(plays)) if plays else 0
 
     def _hc_check(dimension, label, sp):
         if len(sp) < MIN_N: return None
         run_n = len([p for p in sp if p['rp'] == 'Run'])
         run_pct = run_n / len(sp)
-        pass_pct = 1 - run_pct
-        if run_pct >= THRESH:
-            top_c = top3(sp, 'concept', 1)
-            return (dimension, label, len(sp), 'Run', run_pct, top_c[0]['v'] + f" ({top_c[0]['n']})" if top_c else "\u2014")
-        if pass_pct >= THRESH:
-            top_c = top3(sp, 'concept', 1)
-            return (dimension, label, len(sp), 'Pass', pass_pct, top_c[0]['v'] + f" ({top_c[0]['n']})" if top_c else "\u2014")
-        return None
+        swing = run_pct - baseline_run_pct
+        if abs(swing) < MIN_SWING: return None
+        direction = "More Run-Heavy" if swing > 0 else "More Pass-Heavy"
+        top_c = top3(sp, 'concept', 1)
+        top_txt = top_c[0]['v'] + f" ({top_c[0]['n']})" if top_c else "\u2014"
+        return (dimension, label, len(sp), run_pct, swing, direction, top_txt)
 
     hc_hits = []
 
@@ -4692,32 +4691,38 @@ def build_excel(plays, opp, week, date):
         hit = _hc_check("Down & Distance", lbl, sp)
         if hit: hc_hits.append(hit)
 
-    hc_hits.sort(key=lambda h: -h[4])
+    hc_hits.sort(key=lambda h: -abs(h[4]))
 
-    banner(ws21, 1, "HIGH-CONFIDENCE TENDENCIES  \u2014  Every Split of 75% or Higher (5+ Snaps)", 6, bg=CB, sz=13, ht=28)
-    for c, txt, bg in [(1, "CATEGORY", CTe), (2, "GROUP", CTe), (3, "SNAPS", CTe),
-                       (4, "TENDENCY", CTe), (5, "%", CTe), (6, "TOP CONCEPT", CTe)]:
-        hdr(ws21, 2, c, txt, bg=bg, sz=9)
-    row = 3
+    banner(ws21, 1, "HIGH-CONFIDENCE TENDENCIES  \u2014  Biggest Swings From Their Own Baseline (5+ Snaps)", 7, bg=CB, sz=13, ht=28)
+    ws21.merge_cells("A2:G2")
+    c = ws21.cell(row=2, column=1,
+                   value=f"Their overall run rate is {round(baseline_run_pct*100)}% \u2014 showing every situation that swings 15+ points away from that")
+    c.font = Font(name=FN, size=9, italic=True, color=CDG); c.alignment = Alignment(horizontal="center", vertical="center")
+    ws21.row_dimensions[2].height = 16
+    for c1, txt, bg in [(1, "CATEGORY", CTe), (2, "GROUP", CTe), (3, "SNAPS", CTe), (4, "RUN%", CTe),
+                       (5, "SWING FROM BASELINE", CTe), (6, "DIRECTION", CTe), (7, "TOP CONCEPT", CTe)]:
+        hdr(ws21, 3, c1, txt, bg=bg, sz=9, wrap=True)
+    row = 4
     if not hc_hits:
-        ws21.merge_cells(start_row=row, start_column=1, end_row=row, end_column=6)
-        c = ws21.cell(row=row, column=1, value="No tendencies at 75%+ found with at least 5 snaps.")
+        ws21.merge_cells(start_row=row, start_column=1, end_row=row, end_column=7)
+        c = ws21.cell(row=row, column=1, value="No situations swing 15+ points from their baseline with at least 5 snaps.")
         c.font = Font(name=FN, sz=10, italic=True, color=CDG); c.alignment = Alignment(horizontal="center")
         row += 1
     else:
-        for ri, (dim, lbl, n, tendency, tpct, top_c) in enumerate(hc_hits):
+        for ri, (dim, lbl, n, run_pct, swing, direction, top_c) in enumerate(hc_hits):
             bg = CL if ri % 2 == 0 else CW
-            t_color = "FF8B0000" if tendency == "Run" else "FF00008B"
+            t_color = "FF8B0000" if swing > 0 else "FF00008B"
             sc(ws21, row, 1, dim, sz=9, bg=bg, h="left")
             sc(ws21, row, 2, lbl, bold=True, sz=9, fc="FF000000", bg=bg, h="left")
             sc(ws21, row, 3, n, sz=9, bg=bg, fmt="0")
-            sc(ws21, row, 4, tendency, bold=True, sz=9, fc=t_color, bg=bg)
-            sc(ws21, row, 5, round(tpct, 2), bold=True, sz=10, fc=t_color, bg=bg, fmt="0%")
-            sc(ws21, row, 6, top_c, sz=9, bg=bg, h="left")
+            sc(ws21, row, 4, round(run_pct, 2), sz=9, bg=bg, fmt="0%")
+            sc(ws21, row, 5, round(swing, 2), bold=True, sz=10, fc=t_color, bg=bg, fmt="+0%;-0%")
+            sc(ws21, row, 6, direction, bold=True, sz=9, fc=t_color, bg=bg)
+            sc(ws21, row, 7, top_c, sz=9, bg=bg, h="left")
             ws21.row_dimensions[row].height = 16
             row += 1
-    ws21.freeze_panes = "A3"
-    print_friendly(ws21, repeat_rows="1:2")
+    ws21.freeze_panes = "A4"
+    print_friendly(ws21, repeat_rows="1:3")
 
     # ── Tab 16: Open/Closed (with cross-break by Form Family) ─
     ws14c = wb2.create_sheet("16. Open-Closed")
