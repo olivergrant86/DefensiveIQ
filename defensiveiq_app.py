@@ -5856,7 +5856,7 @@ def build_excel(plays, opp, week, date):
     widths(ws_cov, [6] + [12] * 12)
     LAST_ROW = 37
     for r in range(1, LAST_ROW + 1):
-        ws_cov.row_dimensions[r].height = 15
+        ws_cov.row_dimensions[r].height = 19
     ws_cov.row_dimensions[1].height = 36
     banner(ws_cov, 1, "DUNCAN DEMONS  \u00b7  DEFENSIVEIQ", 13, bg=CB, sz=16, ht=36)
     ws_cov.merge_cells("A2:M2")
@@ -5866,7 +5866,7 @@ def build_excel(plays, opp, week, date):
 
     # Logo, moved to the left to make room for the table of contents
     _cov_logo = XLImage(_logo_stream())
-    _cov_logo.width, _cov_logo.height = 380, 362
+    _cov_logo.width, _cov_logo.height = 420, 400
     ws_cov.add_image(_cov_logo, "B3")
 
     # Table of contents, to the right of the logo, one hyperlinked line per tab
@@ -5898,7 +5898,7 @@ def build_excel(plays, opp, week, date):
     for _tab_name, _desc in TOC_ENTRIES:
         ws_cov.merge_cells(start_row=_toc_row, start_column=7, end_row=_toc_row, end_column=13)
         _toc_cell = ws_cov.cell(row=_toc_row, column=7, value=f"{_tab_name}  \u2014  {_desc}")
-        _toc_cell.font = Font(name=FN, size=8, color="FF1A5276", underline="single")
+        _toc_cell.font = Font(name=FN, size=10, color="FF1A5276", underline="single")
         _toc_cell.alignment = Alignment(horizontal="left", vertical="center")
         _toc_cell.hyperlink = f"#'{_tab_name}'!A1"
         _toc_row += 1
