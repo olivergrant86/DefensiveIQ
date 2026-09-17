@@ -4645,7 +4645,7 @@ def build_excel(plays, opp, week, date):
     # ── Tab: High-Confidence Tendencies (biggest swings from baseline) ──
     ws21 = wb2.create_sheet("21b. High-Confidence Tendencies")
     ws21.sheet_properties.tabColor = "D2011A"; ws21.sheet_view.showGridLines = False
-    widths(ws21, [22, 26, 10, 10, 14, 18, 26])
+    widths(ws21, [22, 26, 10, 10, 10, 14, 18, 26])
     MIN_N = 5
     MIN_SWING = 0.15
     baseline_run_pct = (len([p for p in plays if p['rp'] == 'Run']) / len(plays)) if plays else 0
@@ -4693,18 +4693,18 @@ def build_excel(plays, opp, week, date):
 
     hc_hits.sort(key=lambda h: -abs(h[4]))
 
-    banner(ws21, 1, "HIGH-CONFIDENCE TENDENCIES  \u2014  Biggest Swings From Their Own Baseline (5+ Snaps)", 7, bg=CB, sz=13, ht=28)
-    ws21.merge_cells("A2:G2")
+    banner(ws21, 1, "HIGH-CONFIDENCE TENDENCIES  \u2014  Biggest Swings From Their Own Baseline (5+ Snaps)", 8, bg=CB, sz=13, ht=28)
+    ws21.merge_cells("A2:H2")
     c = ws21.cell(row=2, column=1,
                    value=f"Their overall run rate is {round(baseline_run_pct*100)}% \u2014 showing every situation that swings 15+ points away from that")
     c.font = Font(name=FN, size=9, italic=True, color=CDG); c.alignment = Alignment(horizontal="center", vertical="center")
     ws21.row_dimensions[2].height = 16
-    for c1, txt, bg in [(1, "CATEGORY", CTe), (2, "GROUP", CTe), (3, "SNAPS", CTe), (4, "RUN%", CTe),
-                       (5, "SWING FROM BASELINE", CTe), (6, "DIRECTION", CTe), (7, "TOP CONCEPT", CTe)]:
+    for c1, txt, bg in [(1, "CATEGORY", CTe), (2, "GROUP", CTe), (3, "SNAPS", CTe), (4, "RUN%", CTe), (5, "PASS%", CTe),
+                       (6, "SWING FROM BASELINE", CTe), (7, "DIRECTION", CTe), (8, "TOP CONCEPT", CTe)]:
         hdr(ws21, 3, c1, txt, bg=bg, sz=9, wrap=True)
     row = 4
     if not hc_hits:
-        ws21.merge_cells(start_row=row, start_column=1, end_row=row, end_column=7)
+        ws21.merge_cells(start_row=row, start_column=1, end_row=row, end_column=8)
         c = ws21.cell(row=row, column=1, value="No situations swing 15+ points from their baseline with at least 5 snaps.")
         c.font = Font(name=FN, sz=10, italic=True, color=CDG); c.alignment = Alignment(horizontal="center")
         row += 1
@@ -4716,9 +4716,10 @@ def build_excel(plays, opp, week, date):
             sc(ws21, row, 2, lbl, bold=True, sz=9, fc="FF000000", bg=bg, h="left")
             sc(ws21, row, 3, n, sz=9, bg=bg, fmt="0")
             sc(ws21, row, 4, round(run_pct, 2), sz=9, bg=bg, fmt="0%")
-            sc(ws21, row, 5, round(swing, 2), bold=True, sz=10, fc=t_color, bg=bg, fmt="+0%;-0%")
-            sc(ws21, row, 6, direction, bold=True, sz=9, fc=t_color, bg=bg)
-            sc(ws21, row, 7, top_c, sz=9, bg=bg, h="left")
+            sc(ws21, row, 5, round(1 - run_pct, 2), sz=9, bg=bg, fmt="0%")
+            sc(ws21, row, 6, round(abs(swing), 2), bold=True, sz=10, fc=t_color, bg=bg, fmt="+0%")
+            sc(ws21, row, 7, direction, bold=True, sz=9, fc=t_color, bg=bg)
+            sc(ws21, row, 8, top_c, sz=9, bg=bg, h="left")
             ws21.row_dimensions[row].height = 16
             row += 1
     ws21.freeze_panes = "A4"
