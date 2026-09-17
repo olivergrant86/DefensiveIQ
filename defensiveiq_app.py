@@ -4779,6 +4779,90 @@ def build_excel(plays, opp, week, date):
     ws21.freeze_panes = "A4"
     print_friendly(ws21, repeat_rows="1:3")
 
+    # ── Tab: Combo Tendencies (two dimensions at once) ────────────
+    ws22 = wb2.create_sheet("22b. Combo Tendencies")
+    ws22.sheet_properties.tabColor = "6C3483"; ws22.sheet_view.showGridLines = False
+    widths(ws22, [30, 30, 10, 10, 10, 14, 14, 18, 26])
+
+    combo_hits = []
+
+    def _combo_scan(dim_a_name, key_fn_a, dim_b_name, key_fn_b, label_fn_b=None):
+        groups_a = {}
+        for p in plays:
+            ka = key_fn_a(p)
+            if ka is None or str(ka).strip() in ('', 'nan', 'None'): continue
+            groups_a.setdefault(ka, []).append(p)
+        for ka, sp_a in groups_a.items():
+            groups_b = {}
+            for p in sp_a:
+                kb = key_fn_b(p)
+                if kb is None or str(kb).strip() in ('', 'nan', 'None'): continue
+                groups_b.setdefault(kb, []).append(p)
+            for kb, sp_ab in groups_b.items():
+                lbl_b = label_fn_b(kb) if label_fn_b else str(kb)
+                combo_label = f"{ka}  +  {lbl_b}"
+                hit = _hc_check(f"{dim_a_name} \u00d7 {dim_b_name}", combo_label, sp_ab)
+                if hit: combo_hits.append(hit)
+
+    def _combo_scan_dd(dim_a_name, key_fn_a):
+        groups_a = {}
+        for p in plays:
+            ka = key_fn_a(p)
+            if ka is None or str(ka).strip() in ('', 'nan', 'None'): continue
+            groups_a.setdefault(ka, []).append(p)
+        for ka, sp_a in groups_a.items():
+            for lbl, fn in DD_SITS:
+                sp_ab = [p for p in sp_a if fn(p)]
+                combo_label = f"{ka}  +  {lbl}"
+                hit = _hc_check(f"{dim_a_name} \u00d7 Down & Distance", combo_label, sp_ab)
+                if hit: combo_hits.append(hit)
+
+    _combo_scan_dd("Formation", lambda p: p['form'])
+    _combo_scan_dd("FIB Status", lambda p: 'FIB\u2019d' if _is_fib(p['fib']) else 'Not FIB\u2019d')
+    _combo_scan_dd("Motion", lambda p: p['motion'] if p['motion'] else 'No Motion')
+    _combo_scan_dd("Back Depth", lambda p: p['back_depth'])
+    _combo_scan_dd("Strong/Weak", lambda p: p['strong_weak'])
+    _combo_scan_dd("Hash", lambda p: {'L': 'Left Hash', 'M': 'Middle', 'R': 'Right Hash'}.get(p['hash'], p['hash']))
+    _combo_scan("FIB Status", lambda p: 'FIB\u2019d' if _is_fib(p['fib']) else 'Not FIB\u2019d',
+                "Field Zone", lambda p: p['zone'], lambda k: ZONE_NAMES.get(k, k))
+    _combo_scan("Formation", lambda p: p['form'],
+                "FIB Status", lambda p: 'FIB\u2019d' if _is_fib(p['fib']) else 'Not FIB\u2019d')
+
+    combo_hits.sort(key=lambda h: -abs(h[4]))
+
+    banner(ws22, 1, "COMBO TENDENCIES  \u2014  Two Conditions at Once (Sample-Size Adjusted)", 9, bg=CB, sz=13, ht=28)
+    ws22.merge_cells("A2:I2")
+    c = ws22.cell(row=2, column=1,
+                   value=f"Their overall run rate is {round(baseline_run_pct*100)}% \u2014 same swing-vs-baseline math as High-Confidence Tendencies, applied to combinations")
+    c.font = Font(name=FN, size=9, italic=True, color=CDG); c.alignment = Alignment(horizontal="center", vertical="center")
+    ws22.row_dimensions[2].height = 16
+    for c1, txt, bg in [(1, "COMBINATION", CTe), (2, "SPECIFIC MATCH", CTe), (3, "SNAPS", CTe), (4, "RUN%", CTe),
+                       (5, "PASS%", CTe), (6, "SWING", CTe), (7, "THRESHOLD", CTe), (8, "DIRECTION", CTe), (9, "TOP CONCEPT", CTe)]:
+        hdr(ws22, 3, c1, txt, bg=bg, sz=9, wrap=True)
+    row = 4
+    if not combo_hits:
+        ws22.merge_cells(start_row=row, start_column=1, end_row=row, end_column=9)
+        c = ws22.cell(row=row, column=1, value="No combinations clear the sample-size-adjusted threshold.")
+        c.font = Font(name=FN, sz=10, italic=True, color=CDG); c.alignment = Alignment(horizontal="center")
+        row += 1
+    else:
+        for ri, (dim, lbl, n, run_pct, swing, direction, top_c, req_swing) in enumerate(combo_hits):
+            bg = CL if ri % 2 == 0 else CW
+            t_color = "FF8B0000" if swing > 0 else "FF00008B"
+            sc(ws22, row, 1, dim, sz=9, bg=bg, h="left")
+            sc(ws22, row, 2, lbl, bold=True, sz=9, fc="FF000000", bg=bg, h="left")
+            sc(ws22, row, 3, n, sz=9, bg=bg, fmt="0")
+            sc(ws22, row, 4, round(run_pct, 2), sz=9, bg=bg, fmt="0%")
+            sc(ws22, row, 5, round(1 - run_pct, 2), sz=9, bg=bg, fmt="0%")
+            sc(ws22, row, 6, round(abs(swing), 2), bold=True, sz=10, fc=t_color, bg=bg, fmt="+0%")
+            sc(ws22, row, 7, round(req_swing, 2), sz=9, fc="FF888888", bg=bg, fmt="+0%")
+            sc(ws22, row, 8, direction, bold=True, sz=9, fc=t_color, bg=bg)
+            sc(ws22, row, 9, top_c, sz=9, bg=bg, h="left")
+            ws22.row_dimensions[row].height = 16
+            row += 1
+    ws22.freeze_panes = "A4"
+    print_friendly(ws22, repeat_rows="1:3")
+
     # ── Tab 16: Open/Closed (with cross-break by Form Family) ─
     ws14c = wb2.create_sheet("16. Open-Closed")
 
@@ -5861,6 +5945,7 @@ def build_excel(plays, opp, week, date):
         ("1. Film Log", "20. Film Log"),
         ("20. Ball Carrier Tendencies", "21. Ball Carrier Tendencies"),
         ("21b. High-Confidence Tendencies", "22. High-Confidence Tendencies"),
+        ("22b. Combo Tendencies", "23. Combo Tendencies"),
     ]
     for old_name, new_name in _new_order:
         wb2[old_name].title = new_name
