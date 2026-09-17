@@ -4649,6 +4649,7 @@ def build_excel(plays, opp, week, date):
     MIN_N = 5
     SE_MULTIPLIER = 2.0
     MIN_SWING_FLOOR = 0.08
+    NEAR_AUTO_THRESH = 0.95
     baseline_run_pct = (len([p for p in plays if p['rp'] == 'Run']) / len(plays)) if plays else 0
 
     def _hc_check(dimension, label, sp):
@@ -4665,7 +4666,24 @@ def build_excel(plays, opp, week, date):
         top_txt = top_c[0]['v'] + f" ({top_c[0]['n']})" if top_c else "\u2014"
         return (dimension, label, n, run_pct, swing, direction, top_txt, required_swing)
 
+    def _hc_check_near_auto(dimension, label, sp):
+        n = len(sp)
+        if n < MIN_N: return None
+        run_n = len([p for p in sp if p['rp'] == 'Run'])
+        run_pct = run_n / n
+        pass_pct = 1 - run_pct
+        if run_pct >= NEAR_AUTO_THRESH:
+            tendency, tpct = 'Run', run_pct
+        elif pass_pct >= NEAR_AUTO_THRESH:
+            tendency, tpct = 'Pass', pass_pct
+        else:
+            return None
+        top_c = top3(sp, 'concept', 1)
+        top_txt = top_c[0]['v'] + f" ({top_c[0]['n']})" if top_c else "\u2014"
+        return (dimension, label, n, tendency, tpct, top_txt)
+
     hc_hits = []
+    hc_hits_95 = []
 
     def _scan(dimension, key_fn, label_fn=None):
         groups = {}
@@ -4677,6 +4695,8 @@ def build_excel(plays, opp, week, date):
             lbl = label_fn(k) if label_fn else str(k)
             hit = _hc_check(dimension, lbl, sp)
             if hit: hc_hits.append(hit)
+            hit95 = _hc_check_near_auto(dimension, lbl, sp)
+            if hit95: hc_hits_95.append(hit95)
 
     _scan("Formation", lambda p: p['form'])
     _scan("Form Family", lambda p: p['form_family'])
@@ -4694,8 +4714,11 @@ def build_excel(plays, opp, week, date):
         sp = [p for p in plays if fn(p)]
         hit = _hc_check("Down & Distance", lbl, sp)
         if hit: hc_hits.append(hit)
+        hit95 = _hc_check_near_auto("Down & Distance", lbl, sp)
+        if hit95: hc_hits_95.append(hit95)
 
     hc_hits.sort(key=lambda h: -abs(h[4]))
+    hc_hits_95.sort(key=lambda h: -h[4])
 
     banner(ws21, 1, "HIGH-CONFIDENCE TENDENCIES  \u2014  Biggest Swings From Their Own Baseline (Sample-Size Adjusted)", 9, bg=CB, sz=13, ht=28)
     ws21.merge_cells("A2:I2")
@@ -4727,6 +4750,32 @@ def build_excel(plays, opp, week, date):
             sc(ws21, row, 9, top_c, sz=9, bg=bg, h="left")
             ws21.row_dimensions[row].height = 16
             row += 1
+
+    row += 2
+    banner(ws21, row, "NEAR-AUTOMATIC TENDENCIES  \u2014  95% or Higher (5+ Snaps)", 6, bg="FF8B0000", sz=13, ht=26)
+    row += 1
+    for c1, txt, bg in [(1, "CATEGORY", CTe), (2, "GROUP", CTe), (3, "SNAPS", CTe),
+                       (4, "TENDENCY", CTe), (5, "%", CTe), (6, "TOP CONCEPT", CTe)]:
+        hdr(ws21, row, c1, txt, bg=bg, sz=9)
+    row += 1
+    if not hc_hits_95:
+        ws21.merge_cells(start_row=row, start_column=1, end_row=row, end_column=6)
+        c = ws21.cell(row=row, column=1, value="No situations at 95%+ with at least 5 snaps.")
+        c.font = Font(name=FN, sz=10, italic=True, color=CDG); c.alignment = Alignment(horizontal="center")
+        row += 1
+    else:
+        for ri, (dim, lbl, n, tendency, tpct, top_c) in enumerate(hc_hits_95):
+            bg = CL if ri % 2 == 0 else CW
+            t_color = "FF8B0000" if tendency == "Run" else "FF00008B"
+            sc(ws21, row, 1, dim, sz=9, bg=bg, h="left")
+            sc(ws21, row, 2, lbl, bold=True, sz=9, fc="FF000000", bg=bg, h="left")
+            sc(ws21, row, 3, n, sz=9, bg=bg, fmt="0")
+            sc(ws21, row, 4, tendency, bold=True, sz=9, fc=t_color, bg=bg)
+            sc(ws21, row, 5, round(tpct, 2), bold=True, sz=10, fc=t_color, bg=bg, fmt="0%")
+            sc(ws21, row, 6, top_c, sz=9, bg=bg, h="left")
+            ws21.row_dimensions[row].height = 16
+            row += 1
+
     ws21.freeze_panes = "A4"
     print_friendly(ws21, repeat_rows="1:3")
 
