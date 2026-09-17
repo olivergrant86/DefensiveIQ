@@ -5854,47 +5854,86 @@ def build_excel(plays, opp, week, date):
     ws_cov.page_setup.orientation = "landscape"
     ws_cov.page_setup.fitToPage = True; ws_cov.page_setup.fitToWidth = 1; ws_cov.page_setup.fitToHeight = 1
     widths(ws_cov, [6] + [12] * 12)
-    for r in range(1, 26):
-        ws_cov.row_dimensions[r].height = 22
+    LAST_ROW = 37
+    for r in range(1, LAST_ROW + 1):
+        ws_cov.row_dimensions[r].height = 15
+    ws_cov.row_dimensions[1].height = 36
     banner(ws_cov, 1, "DUNCAN DEMONS  \u00b7  DEFENSIVEIQ", 13, bg=CB, sz=16, ht=36)
     ws_cov.merge_cells("A2:M2")
     ws_cov.row_dimensions[2].height = 5
     _accent_cell = ws_cov.cell(row=2, column=1, value="")
     _accent_cell.fill = fil("FFD2011A")
+
+    # Logo, moved to the left to make room for the table of contents
     _cov_logo = XLImage(_oklahoma_logo_stream())
-    _cov_logo.width, _cov_logo.height = 320, 193
-    ws_cov.add_image(_cov_logo, "E4")
+    _cov_logo.width, _cov_logo.height = 260, 157
+    ws_cov.add_image(_cov_logo, "B4")
+
+    # Table of contents, to the right of the logo, one hyperlinked line per tab
+    TOC_ENTRIES = [
+        ("2. Practice Scripts", "Weekly practice scripts, Formation Recognition & Thursday Script"),
+        ("3. Formation Breakdowns", "Every formation's run/pass detail by Strong/Weak"),
+        ("4. Run Concepts", "Their favorite run plays, ranked"),
+        ("5. Pass Concepts", "Their favorite pass plays, ranked"),
+        ("6. Down & Distance", "Tendencies by down-and-distance situation"),
+        ("7. Formation Tendencies", "Run/pass split & favorite plays by formation"),
+        ("8. Form Family Tendencies", "Tendencies grouped by formation family"),
+        ("9. FIB Tendencies", "Tendencies broken out by FIB status"),
+        ("10. Open-Closed", "Tendencies by Open/Closed designation"),
+        ("11. Back Depth", "Tendencies by running back depth/alignment"),
+        ("12. Motion Tendencies", "Run/pass tip-off when they motion pre-snap"),
+        ("13. Sequencing & Response", "What they call after runs, scores, turnovers & drive openers"),
+        ("14. High-Confidence Tendencies", "Every real statistical tendency in the file, ranked"),
+        ("15. Stats", "Passing, rushing & receiving stats by player"),
+        ("16. Game Day Call Sheet", "Printable sideline reference sheet"),
+        ("17. Run Tendencies", "Overall run-play breakdown"),
+        ("18. Pass Tendencies", "Overall pass-play breakdown"),
+        ("19. Hash Tendencies", "Tendencies by hash mark"),
+        ("20. Field Zone Tendencies", "Tendencies by field zone"),
+        ("21. Film Log", "Full play-by-play log of every snap"),
+        ("22. Ball Carrier Tendencies", "Per-running-back profile: carries, yards, favorite plays"),
+        ("23. Combo Tendencies", "Two-condition compound tendencies"),
+    ]
+    _toc_row = 3
+    for _tab_name, _desc in TOC_ENTRIES:
+        ws_cov.merge_cells(start_row=_toc_row, start_column=7, end_row=_toc_row, end_column=13)
+        _toc_cell = ws_cov.cell(row=_toc_row, column=7, value=f"{_tab_name}  \u2014  {_desc}")
+        _toc_cell.font = Font(name=FN, size=8, color="FF1A5276", underline="single")
+        _toc_cell.alignment = Alignment(horizontal="left", vertical="center")
+        _toc_cell.hyperlink = f"#'{_tab_name}'!A1"
+        _toc_row += 1
+
     _cov_wordmark = XLImage(_wordmark_stream())
     _cov_wordmark.width, _cov_wordmark.height = 110, 45
-    ws_cov.add_image(_cov_wordmark, "A23")
-    for _tr in range(14, 19):
+    ws_cov.add_image(_cov_wordmark, "A35")
+    for _tr in range(26, 31):
         for _tc in range(2, 14):
             ws_cov.cell(row=_tr, column=_tc).fill = fil("FFD2011A")
-    ws_cov.merge_cells("B15:M15")
-    c = ws_cov.cell(row=15, column=2, value="OPPONENT SCOUTING REPORT")
+    ws_cov.merge_cells("B27:M27")
+    c = ws_cov.cell(row=27, column=2, value="OPPONENT SCOUTING REPORT")
     c.font = Font(name=FN, bold=True, size=22, color="FFFFFFFF")
     c.alignment = Alignment(horizontal="center", vertical="center")
-    ws_cov.merge_cells("B17:M17")
-    c = ws_cov.cell(row=17, column=2, value=(opp or "Opponent").upper())
+    ws_cov.merge_cells("B29:M29")
+    c = ws_cov.cell(row=29, column=2, value=(opp or "Opponent").upper())
     c.font = Font(name=FN, bold=True, size=28, color="FFFFFFFF")
     c.alignment = Alignment(horizontal="center", vertical="center")
     meta_bits = [x for x in [f"Week {week}" if week else "", date or "", f"{len(plays)} plays analyzed"] if x]
-    ws_cov.merge_cells("B20:M20")
-    c = ws_cov.cell(row=20, column=2, value="   \u00b7   ".join(meta_bits))
+    ws_cov.merge_cells("B32:M32")
+    c = ws_cov.cell(row=32, column=2, value="   \u00b7   ".join(meta_bits))
     c.font = Font(name=FN, size=13, color="FF555555")
     c.alignment = Alignment(horizontal="center", vertical="center")
-    ws_cov.merge_cells("B23:M23")
-    c = ws_cov.cell(row=23, column=2, value="Auto-generated from film \u2014 see the tabs below for the full breakdown.")
+    ws_cov.merge_cells("B35:M35")
+    c = ws_cov.cell(row=35, column=2, value="Auto-generated from film \u2014 see the tabs above for the full breakdown.")
     c.font = Font(name=FN, size=10, italic=True, color="FF999999")
     c.alignment = Alignment(horizontal="center", vertical="center")
-    ws_cov.merge_cells("B24:M24")
-    c = ws_cov.cell(row=24, column=2, value="C O N F I D E N T I A L   \u2014   I N T E R N A L   U S E   O N L Y")
+    ws_cov.merge_cells("B36:M36")
+    c = ws_cov.cell(row=36, column=2, value="C O N F I D E N T I A L   \u2014   I N T E R N A L   U S E   O N L Y")
     c.font = Font(name=FN, size=8, color="FFBBBBBB")
     c.alignment = Alignment(horizontal="center", vertical="center")
 
     # Subtle yard-line texture across the page background
     _yard_side = Side(style="hair", color="FFF0D8D8")
-    for _yr in (3, 6, 9, 12, 18, 21):
+    for _yr in (25, 31, 33, 34):
         for _yc in range(2, 14):
             _ycell = ws_cov.cell(row=_yr, column=_yc)
             _yexisting = _ycell.border
@@ -5903,7 +5942,7 @@ def build_excel(plays, opp, week, date):
 
     # Decorative frame around the printable cover page
     _frame_side = Side(style="thick", color="FFD2011A")
-    _first_row, _last_row = 1, 25
+    _first_row, _last_row = 1, LAST_ROW
     _first_col, _last_col = 1, 13
     for _r in range(_first_row, _last_row + 1):
         for _c in range(_first_col, _last_col + 1):
