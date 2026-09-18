@@ -4940,6 +4940,62 @@ def build_excel(plays, opp, week, date):
         _cmp_metric("Red Zone Run %",
                      lambda sp: (lambda d: f"{pct(len([p for p in d if p['rp']=='Run']), len(d))}%" if d else "\u2014")([p for p in sp if p['zone'] == 'RZ']),
                      numeric_fn=lambda sp: _raw_pct(len([p for p in sp if p['zone'] == 'RZ' and p['rp'] == 'Run']), len([p for p in sp if p['zone'] == 'RZ'])))
+
+        _grid_row = [_cmp_row[0] + 2]
+
+        def _grid_banner(title, row_label="SITUATION", last_col_label="CONSISTENCY"):
+            r = _grid_row[0]
+            banner(ws23, r, title, NC_cmp, bg="FF6C3483", sz=12, ht=24)
+            _grid_row[0] += 1
+            for c1, txt, bg in [(1, row_label, CTe)] + [(2 + gi, f"vs {gn}", CTe) for gi, gn in enumerate(_game_names)] + [(2 + len(_game_names), last_col_label, CTe)]:
+                hdr(ws23, _grid_row[0], c1, txt, bg=bg, sz=9, wrap=True)
+            _grid_row[0] += 1
+
+        _grid_banner("DOWN & DISTANCE  \u2014  Run% by Situation, Every Game")
+        for _lbl, _fn in DD_SITS:
+            r = _grid_row[0]
+            bg = CL if r % 2 == 0 else CW
+            sc(ws23, r, 1, _lbl, bold=True, sz=9, fc="FF000000", bg=bg, h="left")
+            _vals = []
+            for _gi, _gname in enumerate(_game_names):
+                _d = [p for p in _game_groups[_gname] if _fn(p)]
+                if _d:
+                    _rp = _raw_pct(len([p for p in _d if p['rp'] == 'Run']), len(_d))
+                    sc(ws23, r, 2 + _gi, f"{round(_rp)}%", sz=9, bg=bg)
+                    _vals.append(_rp)
+                else:
+                    sc(ws23, r, 2 + _gi, "\u2014", sz=9, fc="FF999999", bg=bg)
+            _cons_col = 2 + len(_game_names)
+            if len(_vals) >= 2:
+                _spread = max(_vals) - min(_vals)
+                _volatile = _spread >= 15
+                sc(ws23, r, _cons_col, f"{'Volatile' if _volatile else 'Stable'} (\u00b1{round(_spread)}pt)",
+                   bold=True, sz=9, fc="FF8B0000" if _volatile else "FF1E8449", bg=bg)
+            else:
+                sc(ws23, r, _cons_col, "\u2014", sz=9, fc="FF999999", bg=bg)
+            ws23.row_dimensions[r].height = 16
+            _grid_row[0] += 1
+
+        _grid_row[0] += 1
+        _grid_banner("FORMATION USAGE  \u2014  Snap Counts, Every Game", row_label="FORMATION", last_col_label="TOTAL")
+        _form_totals = {}
+        for _gname, _sp in _game_groups.items():
+            for _p in _sp:
+                _f = str(_p.get('form', '')).strip()
+                if _f in ('', 'nan', 'None'): continue
+                _form_totals[_f] = _form_totals.get(_f, 0) + 1
+        _top_forms_combined = sorted(_form_totals.items(), key=lambda kv: -kv[1])[:8]
+        for _fname, _ftotal in _top_forms_combined:
+            r = _grid_row[0]
+            bg = CL if r % 2 == 0 else CW
+            sc(ws23, r, 1, _fname, bold=True, sz=9, fc="FF000000", bg=bg, h="left")
+            for _gi, _gname in enumerate(_game_names):
+                _n = len([p for p in _game_groups[_gname] if str(p.get('form', '')).strip() == _fname])
+                sc(ws23, r, 2 + _gi, _n if _n else "\u2014", sz=9, fc="FF999999" if not _n else "FF000000", bg=bg, fmt="0" if _n else None)
+            sc(ws23, r, 2 + len(_game_names), _ftotal, bold=True, sz=9, fc="FF000000", bg=bg, fmt="0")
+            ws23.row_dimensions[r].height = 16
+            _grid_row[0] += 1
+
         ws23.freeze_panes = "B3"
         print_friendly(ws23, repeat_rows="1:2")
 
