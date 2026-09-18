@@ -4879,22 +4879,39 @@ def build_excel(plays, opp, week, date):
         ws23 = wb2.create_sheet("22c. Game Comparison")
         ws23.sheet_properties.tabColor = "1A5276"; ws23.sheet_view.showGridLines = False
         _game_names = sorted(_game_groups.keys(), key=lambda k: -len(_game_groups[k]))
-        NC_cmp = 1 + len(_game_names)
-        widths(ws23, [22] + [20] * len(_game_names))
+        NC_cmp = 2 + len(_game_names)
+        widths(ws23, [22] + [28] * len(_game_names) + [16])
         banner(ws23, 1, "GAME COMPARISON  \u2014  Selected Games, Side by Side", NC_cmp, bg=CB, sz=13, ht=28)
         hdr(ws23, 2, 1, "METRIC", bg=CTe, sz=9)
         for _gi, _gname in enumerate(_game_names):
             hdr(ws23, 2, 2 + _gi, f"vs {_gname}", bg=CTe, sz=9, wrap=True)
+        hdr(ws23, 2, 2 + len(_game_names), "CONSISTENCY", bg=CTe, sz=9, wrap=True)
         _cmp_row = [3]
 
-        def _cmp_metric(label, value_fn):
+        def _raw_pct(num, den):
+            return (num / den * 100) if den else None
+
+        def _cmp_metric(label, value_fn, numeric_fn=None, wrap=False):
             r = _cmp_row[0]
             bg = CL if r % 2 == 0 else CW
             sc(ws23, r, 1, label, bold=True, sz=9, fc="FF000000", bg=bg, h="left")
+            numeric_vals = []
             for _gi, _gname in enumerate(_game_names):
                 sp = _game_groups[_gname]
-                sc(ws23, r, 2 + _gi, value_fn(sp), sz=9, bg=bg, h="left")
-            ws23.row_dimensions[r].height = 16
+                sc(ws23, r, 2 + _gi, value_fn(sp), sz=9, bg=bg, h="left", wrap=wrap)
+                if numeric_fn:
+                    v = numeric_fn(sp)
+                    if v is not None: numeric_vals.append(v)
+            cons_col = 2 + len(_game_names)
+            if numeric_fn and len(numeric_vals) >= 2:
+                spread = max(numeric_vals) - min(numeric_vals)
+                is_volatile = spread >= 15
+                cons_txt = f"{'Volatile' if is_volatile else 'Stable'} (\u00b1{round(spread)}pt)"
+                cons_color = "FF8B0000" if is_volatile else "FF1E8449"
+                sc(ws23, r, cons_col, cons_txt, bold=True, sz=9, fc=cons_color, bg=bg)
+            else:
+                sc(ws23, r, cons_col, "\u2014", sz=9, fc="FF999999", bg=bg)
+            ws23.row_dimensions[r].height = 30 if wrap else 16
             _cmp_row[0] += 1
 
         def _top1(sp, key, rp=None):
@@ -4902,14 +4919,27 @@ def build_excel(plays, opp, week, date):
             t = top3(pool, key, 1)
             return f"{t[0]['v']} ({t[0]['n']})" if t else "\u2014"
 
+        def _top3_str(sp, key, rp=None):
+            pool = [p for p in sp if rp is None or p['rp'] == rp]
+            t = top3(pool, key, 3)
+            return ", ".join(f"{x['v']} ({x['n']})" for x in t) if t else "\u2014"
+
         _cmp_metric("Total Plays", lambda sp: str(len(sp)))
-        _cmp_metric("Run %", lambda sp: f"{pct(len([p for p in sp if p['rp']=='Run']), len(sp))}%" if sp else "\u2014")
-        _cmp_metric("Pass %", lambda sp: f"{pct(len([p for p in sp if p['rp']=='Pass']), len(sp))}%" if sp else "\u2014")
+        _cmp_metric("Run %", lambda sp: f"{pct(len([p for p in sp if p['rp']=='Run']), len(sp))}%" if sp else "\u2014",
+                     numeric_fn=lambda sp: _raw_pct(len([p for p in sp if p['rp'] == 'Run']), len(sp)))
+        _cmp_metric("Pass %", lambda sp: f"{pct(len([p for p in sp if p['rp']=='Pass']), len(sp))}%" if sp else "\u2014",
+                     numeric_fn=lambda sp: _raw_pct(len([p for p in sp if p['rp'] == 'Pass']), len(sp)))
+        _cmp_metric("FIB %", lambda sp: f"{pct(len([p for p in sp if _is_fib(p['fib'])]), len(sp))}%" if sp else "\u2014",
+                     numeric_fn=lambda sp: _raw_pct(len([p for p in sp if _is_fib(p['fib'])]), len(sp)))
         _cmp_metric("#1 Formation", lambda sp: _top1(sp, 'form'))
-        _cmp_metric("#1 Run Concept", lambda sp: _top1(sp, 'concept', 'Run'))
-        _cmp_metric("#1 Pass Concept", lambda sp: _top1(sp, 'concept', 'Pass'))
-        _cmp_metric("3rd Down Run %", lambda sp: (lambda d: f"{pct(len([p for p in d if p['rp']=='Run']), len(d))}%" if d else "\u2014")([p for p in sp if p['dn'] == 3]))
-        _cmp_metric("Red Zone Run %", lambda sp: (lambda d: f"{pct(len([p for p in d if p['rp']=='Run']), len(d))}%" if d else "\u2014")([p for p in sp if p['zone'] == 'RZ']))
+        _cmp_metric("Top Run Concepts", lambda sp: _top3_str(sp, 'concept', 'Run'), wrap=True)
+        _cmp_metric("Top Pass Concepts", lambda sp: _top3_str(sp, 'concept', 'Pass'), wrap=True)
+        _cmp_metric("3rd Down Run %",
+                     lambda sp: (lambda d: f"{pct(len([p for p in d if p['rp']=='Run']), len(d))}%" if d else "\u2014")([p for p in sp if p['dn'] == 3]),
+                     numeric_fn=lambda sp: _raw_pct(len([p for p in sp if p['dn'] == 3 and p['rp'] == 'Run']), len([p for p in sp if p['dn'] == 3])))
+        _cmp_metric("Red Zone Run %",
+                     lambda sp: (lambda d: f"{pct(len([p for p in d if p['rp']=='Run']), len(d))}%" if d else "\u2014")([p for p in sp if p['zone'] == 'RZ']),
+                     numeric_fn=lambda sp: _raw_pct(len([p for p in sp if p['zone'] == 'RZ' and p['rp'] == 'Run']), len([p for p in sp if p['zone'] == 'RZ'])))
         ws23.freeze_panes = "B3"
         print_friendly(ws23, repeat_rows="1:2")
 
