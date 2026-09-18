@@ -2759,6 +2759,7 @@ COLUMN_ALIASES = {
     "SCORE":       ["SCORE", "SCORE DIFF", "SCORE DIFFERENTIAL", "MARGIN"],
     "SERIES":      ["SERIES", "DRIVE", "DRIVE #", "DRIVE NUM"],
     "ACTION":      ["ACTION"],
+    "OPP TEAM":    ["OPP TEAM", "OPPONENT TEAM", "OPP", "OPPTEAM"],
     "FORM FAMILY": ["FORM FAMILY", "FORMATION FAMILY", "FAMILY"],
     "FIB":         ["FIB"],
     "PASSER":      ["OPP PASSER", "PASSER", "QB", "QUARTERBACK"],
@@ -2946,6 +2947,7 @@ def load_plays(df):
             'score': score_v,
             'series': str(row.get('SERIES', '')).strip(),
             'action': str(row.get('ACTION', '')).strip().upper() if str(row.get('ACTION', '')).strip().lower() not in ('', 'nan', 'none') else '',
+            'opp_team': str(row.get('OPP TEAM', '')).strip() if str(row.get('OPP TEAM', '')).strip().lower() not in ('', 'nan', 'none') else '',
             'play_num': row.get('PLAY #', ''),
         })
     return plays
@@ -6147,6 +6149,24 @@ with cc2: team_accent = st.color_picker("Accent (highlights)", "#D2011A")
 st.markdown("---")
 uploaded = st.file_uploader("Upload Opponent Offensive Playlist (.xlsx or .csv)", type=['xlsx', 'xls', 'csv'],
                              help="Export the opponent's offensive playlist from Hudl as Excel or CSV and upload here.")
+
+opp_team_filter = "All Games"
+if uploaded is not None:
+    try:
+        if uploaded.name.lower().endswith('.csv'):
+            _peek_df = pd.read_csv(uploaded)
+        else:
+            _peek_df = pd.read_excel(uploaded)
+        uploaded.seek(0)
+        _opp_team_col = next((c for c in ['OPP TEAM', 'OPPONENT TEAM', 'OPP', 'OPPTEAM'] if c in _peek_df.columns), None)
+        if _opp_team_col:
+            _teams = sorted(set(str(t).strip() for t in _peek_df[_opp_team_col].dropna().tolist() if str(t).strip()))
+            if len(_teams) > 1:
+                opp_team_filter = st.selectbox("Filter to one opponent/game (optional)", ["All Games"] + _teams,
+                                                help="If this file has multiple games in it, pick one to analyze just that game.")
+    except Exception:
+        pass
+
 score_filter = st.text_input("Only include plays within this score (optional)",
                               placeholder="e.g. 21 — only breaks down plays with a score of 21 or less")
 
@@ -6179,6 +6199,10 @@ if uploaded and st.button("🛡️ RUN ANALYSIS"):
             st.stop()
 
         plays = load_plays(df)
+        if opp_team_filter and opp_team_filter != "All Games":
+            before_n = len(plays)
+            plays = [p for p in plays if p.get('opp_team', '') == opp_team_filter]
+            st.info(f"Filtered to games vs {opp_team_filter}: {len(plays)} of {before_n} plays included.")
         if score_filter and score_filter.strip():
             try:
                 max_score = float(score_filter.strip())
