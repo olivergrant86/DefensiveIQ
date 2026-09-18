@@ -4868,6 +4868,51 @@ def build_excel(plays, opp, week, date):
     ws22.freeze_panes = "A4"
     print_friendly(ws22, repeat_rows="1:3")
 
+    # ── Tab: Game Comparison (only when multiple games are combined) ──
+    _game_groups = {}
+    for p in plays:
+        ot = p.get('opp_team', '').strip()
+        if not ot: continue
+        _game_groups.setdefault(ot, []).append(p)
+    _game_comparison_created = len(_game_groups) > 1
+    if _game_comparison_created:
+        ws23 = wb2.create_sheet("22c. Game Comparison")
+        ws23.sheet_properties.tabColor = "1A5276"; ws23.sheet_view.showGridLines = False
+        _game_names = sorted(_game_groups.keys(), key=lambda k: -len(_game_groups[k]))
+        NC_cmp = 1 + len(_game_names)
+        widths(ws23, [22] + [20] * len(_game_names))
+        banner(ws23, 1, "GAME COMPARISON  \u2014  Selected Games, Side by Side", NC_cmp, bg=CB, sz=13, ht=28)
+        hdr(ws23, 2, 1, "METRIC", bg=CTe, sz=9)
+        for _gi, _gname in enumerate(_game_names):
+            hdr(ws23, 2, 2 + _gi, f"vs {_gname}", bg=CTe, sz=9, wrap=True)
+        _cmp_row = [3]
+
+        def _cmp_metric(label, value_fn):
+            r = _cmp_row[0]
+            bg = CL if r % 2 == 0 else CW
+            sc(ws23, r, 1, label, bold=True, sz=9, fc="FF000000", bg=bg, h="left")
+            for _gi, _gname in enumerate(_game_names):
+                sp = _game_groups[_gname]
+                sc(ws23, r, 2 + _gi, value_fn(sp), sz=9, bg=bg, h="left")
+            ws23.row_dimensions[r].height = 16
+            _cmp_row[0] += 1
+
+        def _top1(sp, key, rp=None):
+            pool = [p for p in sp if rp is None or p['rp'] == rp]
+            t = top3(pool, key, 1)
+            return f"{t[0]['v']} ({t[0]['n']})" if t else "\u2014"
+
+        _cmp_metric("Total Plays", lambda sp: str(len(sp)))
+        _cmp_metric("Run %", lambda sp: f"{pct(len([p for p in sp if p['rp']=='Run']), len(sp))}%" if sp else "\u2014")
+        _cmp_metric("Pass %", lambda sp: f"{pct(len([p for p in sp if p['rp']=='Pass']), len(sp))}%" if sp else "\u2014")
+        _cmp_metric("#1 Formation", lambda sp: _top1(sp, 'form'))
+        _cmp_metric("#1 Run Concept", lambda sp: _top1(sp, 'concept', 'Run'))
+        _cmp_metric("#1 Pass Concept", lambda sp: _top1(sp, 'concept', 'Pass'))
+        _cmp_metric("3rd Down Run %", lambda sp: (lambda d: f"{pct(len([p for p in d if p['rp']=='Run']), len(d))}%" if d else "\u2014")([p for p in sp if p['dn'] == 3]))
+        _cmp_metric("Red Zone Run %", lambda sp: (lambda d: f"{pct(len([p for p in d if p['rp']=='Run']), len(d))}%" if d else "\u2014")([p for p in sp if p['zone'] == 'RZ']))
+        ws23.freeze_panes = "B3"
+        print_friendly(ws23, repeat_rows="1:2")
+
     # ── Tab 16: Open/Closed (with cross-break by Form Family) ─
     ws14c = wb2.create_sheet("16. Open-Closed")
 
@@ -5899,6 +5944,8 @@ def build_excel(plays, opp, week, date):
         ("22. Ball Carrier Tendencies", "Per-running-back profile: carries, yards, favorite plays"),
         ("23. Combo Tendencies", "Two-condition compound tendencies"),
     ]
+    if _game_comparison_created:
+        TOC_ENTRIES.append(("24. Game Comparison", "Selected games' tendencies side by side"))
     _toc_row = 3
     for _tab_name, _desc in TOC_ENTRIES:
         ws_cov.merge_cells(start_row=_toc_row, start_column=7, end_row=_toc_row, end_column=13)
@@ -5991,6 +6038,8 @@ def build_excel(plays, opp, week, date):
         ("20. Ball Carrier Tendencies", "22. Ball Carrier Tendencies"),
         ("22b. Combo Tendencies", "23. Combo Tendencies"),
     ]
+    if _game_comparison_created:
+        _new_order.append(("22c. Game Comparison", "24. Game Comparison"))
     for old_name, new_name in _new_order:
         wb2[old_name].title = new_name
     wb2._sheets = [wb2[new_name] for _old_name, new_name in _new_order]
