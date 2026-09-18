@@ -6150,7 +6150,7 @@ st.markdown("---")
 uploaded = st.file_uploader("Upload Opponent Offensive Playlist (.xlsx or .csv)", type=['xlsx', 'xls', 'csv'],
                              help="Export the opponent's offensive playlist from Hudl as Excel or CSV and upload here.")
 
-opp_team_filter = "All Games"
+opp_team_filter = None
 if uploaded is not None:
     try:
         if uploaded.name.lower().endswith('.csv'):
@@ -6162,8 +6162,8 @@ if uploaded is not None:
         if _opp_team_col:
             _teams = sorted(set(str(t).strip() for t in _peek_df[_opp_team_col].dropna().tolist() if str(t).strip()))
             if len(_teams) > 1:
-                opp_team_filter = st.selectbox("Filter to one opponent/game (optional)", ["All Games"] + _teams,
-                                                help="If this file has multiple games in it, pick one to analyze just that game.")
+                opp_team_filter = st.multiselect("Filter to specific opponents/games (optional)", _teams, default=_teams,
+                                                  help="Uncheck any games you want to leave out of the analysis.")
     except Exception:
         pass
 
@@ -6199,10 +6199,11 @@ if uploaded and st.button("🛡️ RUN ANALYSIS"):
             st.stop()
 
         plays = load_plays(df)
-        if opp_team_filter and opp_team_filter != "All Games":
+        if opp_team_filter is not None and len(opp_team_filter) > 0:
             before_n = len(plays)
-            plays = [p for p in plays if p.get('opp_team', '') == opp_team_filter]
-            st.info(f"Filtered to games vs {opp_team_filter}: {len(plays)} of {before_n} plays included.")
+            plays = [p for p in plays if p.get('opp_team', '') in opp_team_filter]
+            if len(opp_team_filter) < len(_teams):
+                st.info(f"Filtered to {', '.join(opp_team_filter)}: {len(plays)} of {before_n} plays included.")
         if score_filter and score_filter.strip():
             try:
                 max_score = float(score_filter.strip())
