@@ -4053,7 +4053,7 @@ def build_excel(plays, opp, week, date):
     ws9.sheet_properties.tabColor = "4A235A"; ws9.sheet_view.showGridLines = False
     NC9 = 14
     widths(ws9, [22, 8, 8, 8, 8, 8, 10, 10, 18, 18, 18, 18, 16, 14])
-    banner(ws9, 1, "FORMATION TENDENCIES  \u2014  Favorite Runs & Passes by Formation (3+ snaps)", NC9, bg=CPu, sz=13, ht=28)
+    banner(ws9, 1, "FORMATION TENDENCIES  \u2014  Favorite Runs & Passes by Formation", NC9, bg=CPu, sz=13, ht=28)
     for c, txt, bg in [(1, "FORMATION", CB), (2, "Snaps", CB), (3, "Run%", CB), (4, "Pass%", CB),
                        (5, "Run R%", CR), (6, "Run L%", CR), (7, "Strong%", "FF1A5276"), (8, "Weak%", "FF1A5276"),
                        (9, "#1 Run Concept", CR), (10, "#2 Run Concept", CR),
@@ -4066,7 +4066,6 @@ def build_excel(plays, opp, week, date):
         if f.strip() in ('', 'nan', 'None'): continue
         fgroups.setdefault(f, []).append(p)
     ranked = sorted(fgroups.items(), key=lambda kv: -len(kv[1]))
-    ranked = [(f, g) for f, g in ranked if len(g) >= 3]
     for ri, (f, g) in enumerate(ranked):
         r = ri + 3; ws9.row_dimensions[r].height = 24
         bg = CL if ri % 2 == 0 else CW
