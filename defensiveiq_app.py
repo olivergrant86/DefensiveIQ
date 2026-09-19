@@ -4051,13 +4051,14 @@ def build_excel(plays, opp, week, date):
     # ── Tab 9: Formation Tendencies ───────────────────────────
     ws9 = wb2.create_sheet("9. Formation Tendencies")
     ws9.sheet_properties.tabColor = "4A235A"; ws9.sheet_view.showGridLines = False
-    NC9 = 12
-    widths(ws9, [22, 8, 8, 8, 8, 8, 18, 18, 18, 18, 16, 14])
+    NC9 = 14
+    widths(ws9, [22, 8, 8, 8, 8, 8, 10, 10, 18, 18, 18, 18, 16, 14])
     banner(ws9, 1, "FORMATION TENDENCIES  \u2014  Favorite Runs & Passes by Formation (3+ snaps)", NC9, bg=CPu, sz=13, ht=28)
     for c, txt, bg in [(1, "FORMATION", CB), (2, "Snaps", CB), (3, "Run%", CB), (4, "Pass%", CB),
-                       (5, "Run R%", CR), (6, "Run L%", CR), (7, "#1 Run Concept", CR), (8, "#2 Run Concept", CR),
-                       (9, "#1 Pass Concept", CBl), (10, "#2 Pass Concept", CBl),
-                       (11, "Top Down/Dist", CPu), (12, "Top Zone", CPu)]:
+                       (5, "Run R%", CR), (6, "Run L%", CR), (7, "Strong%", "FF1A5276"), (8, "Weak%", "FF1A5276"),
+                       (9, "#1 Run Concept", CR), (10, "#2 Run Concept", CR),
+                       (11, "#1 Pass Concept", CBl), (12, "#2 Pass Concept", CBl),
+                       (13, "Top Down/Dist", CPu), (14, "Top Zone", CPu)]:
         hdr(ws9, 2, c, txt, bg=bg, sz=8, wrap=True)
     fgroups = {}
     for p in plays:
@@ -4072,19 +4073,23 @@ def build_excel(plays, opp, week, date):
         gr = [p for p in g if p['rp'] == 'Run']; gp = [p for p in g if p['rp'] == 'Pass']
         rd = [p for p in gr if p['dir'] == 'R']; ld = [p for p in gr if p['dir'] == 'L']
         dknown = len(rd) + len(ld)
+        st = [p for p in g if p['strong_weak'] == 'ST']; wk = [p for p in g if p['strong_weak'] == 'WK']
+        swknown = len(st) + len(wk)
         sc(ws9, r, 1, f, bold=True, sz=9, fc=CW, bg=CPu, h="left")
         sc(ws9, r, 2, len(g), bold=True, sz=10, fc="FF000000", bg=bg, fmt="0")
         sc(ws9, r, 3, round(len(gr) / len(g), 2), bold=True, sz=10, fc="FF8B0000", bg=CRB, fmt="0%")
         sc(ws9, r, 4, round(len(gp) / len(g), 2), bold=True, sz=10, fc="FF00008B", bg=CPB, fmt="0%")
         sc(ws9, r, 5, round(len(rd) / dknown, 2) if dknown else "—", sz=9, bg=bg, fmt="0%" if dknown else "General")
         sc(ws9, r, 6, round(len(ld) / dknown, 2) if dknown else "—", sz=9, bg=bg, fmt="0%" if dknown else "General")
+        sc(ws9, r, 7, round(len(st) / swknown, 2) if swknown else "—", bold=True, sz=9, fc="FF1A5276", bg=bg, fmt="0%" if swknown else "General")
+        sc(ws9, r, 8, round(len(wk) / swknown, 2) if swknown else "—", bold=True, sz=9, fc="FF1A5276", bg=bg, fmt="0%" if swknown else "General")
         t3rc = top3_str(gr, 'concept', 2); t3pc = top3_str(gp, 'concept', 2)
-        for i, cn in enumerate([7, 8]): sc(ws9, r, cn, t3rc[i], sz=8, bg=CRB, wrap=True)
-        for i, cn in enumerate([9, 10]): sc(ws9, r, cn, t3pc[i], sz=8, bg=CPB, wrap=True)
+        for i, cn in enumerate([9, 10]): sc(ws9, r, cn, t3rc[i], sz=8, bg=CRB, wrap=True)
+        for i, cn in enumerate([11, 12]): sc(ws9, r, cn, t3pc[i], sz=8, bg=CPB, wrap=True)
         dd_top = Counter(dd_bucket(p) for p in g).most_common(1)
-        sc(ws9, r, 11, f"{dd_top[0][0]} ({dd_top[0][1]})" if dd_top else "—", sz=8, bg=bg, h="left", wrap=True)
+        sc(ws9, r, 13, f"{dd_top[0][0]} ({dd_top[0][1]})" if dd_top else "—", sz=8, bg=bg, h="left", wrap=True)
         z_top = Counter(ZONE_NAMES[p['zone']].split("  ")[0] for p in g).most_common(1)
-        sc(ws9, r, 12, f"{z_top[0][0]} ({z_top[0][1]})" if z_top else "—", sz=8, bg=bg, h="left", wrap=True)
+        sc(ws9, r, 14, f"{z_top[0][0]} ({z_top[0][1]})" if z_top else "—", sz=8, bg=bg, h="left", wrap=True)
     if not ranked:
         ws9.merge_cells(f"A3:{gcl(NC9)}3")
         c = ws9.cell(row=3, column=1, value="Not enough formation data tagged.")
