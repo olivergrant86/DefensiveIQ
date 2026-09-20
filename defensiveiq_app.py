@@ -5806,11 +5806,30 @@ def build_excel(plays, opp, week, date):
     exact_scale_pct = max(10, min(100, round(height_scale * 100)))
 
     for fam_idx, (fam, form_ranked) in enumerate(fam_sections):
-        ws17.merge_cells(start_row=row, start_column=1, end_row=row, end_column=8)
-        _fam_title = ws17.cell(row=row, column=1, value=f"{fam} FORMATIONS")
+        fam_plays_all = [p for _, subset in form_ranked for p in subset]
+        fam_total = len(fam_plays_all)
+        fam_run_n = len([p for p in fam_plays_all if p['rp'] == 'Run'])
+        fam_run_pct = round(fam_run_n / fam_total * 100) if fam_total else 0
+        fam_pass_pct = 100 - fam_run_pct if fam_total else 0
+
+        ws17.merge_cells(start_row=row, start_column=1, end_row=row, end_column=2)
+        _fam_left = ws17.cell(row=row, column=1, value=f"{fam_run_pct}% Run / {fam_pass_pct}% Pass")
+        _fam_left.font = Font(name=FN, bold=True, size=11, color=CW)
+        _fam_left.fill = fil("FFD2011A")
+        _fam_left.alignment = Alignment(horizontal="left", vertical="center", indent=1)
+
+        ws17.merge_cells(start_row=row, start_column=3, end_row=row, end_column=6)
+        _fam_title = ws17.cell(row=row, column=3, value=f"{fam} FORMATIONS")
         _fam_title.font = Font(name=FN, bold=True, size=22, color=CW)
         _fam_title.fill = fil("FFD2011A")
         _fam_title.alignment = Alignment(horizontal="center", vertical="center")
+
+        ws17.merge_cells(start_row=row, start_column=7, end_row=row, end_column=8)
+        _fam_right = ws17.cell(row=row, column=7, value=f"{fam_total} Total Snaps")
+        _fam_right.font = Font(name=FN, bold=True, size=11, color=CW)
+        _fam_right.fill = fil("FFD2011A")
+        _fam_right.alignment = Alignment(horizontal="right", vertical="center", indent=1)
+
         ws17.row_dimensions[row].height = 40
         row += 2
 
