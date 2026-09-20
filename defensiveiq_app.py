@@ -5843,8 +5843,9 @@ def build_excel(plays, opp, week, date):
                 pass_row_heights.append(_needed_row_height(texts))
             natural_band_height = BAND_FIXED_PT + sum(run_row_heights) + sum(pass_row_heights)
             deficit = worst_band_height - natural_band_height
+            MAX_PAD_PER_ROW = 14
             if deficit > 0 and (n_run + n_pass) > 0:
-                extra_per_row = deficit / (n_run + n_pass)
+                extra_per_row = min(deficit / (n_run + n_pass), MAX_PAD_PER_ROW)
                 run_row_heights = [h + extra_per_row for h in run_row_heights]
                 pass_row_heights = [h + extra_per_row for h in pass_row_heights]
             end_rows = []
