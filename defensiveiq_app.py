@@ -5332,6 +5332,97 @@ def build_excel(plays, opp, week, date):
                     break
         return script
 
+    def _enforce_formation_quotas(script, down_plays, total_reps, tolerance=0.10, min_real_snaps=2):
+        """Best-effort: keep each formation's share of reps in the script
+        within +/- tolerance of its real share of the down pool. With a
+        fixed number of discrete reps and multiple formations each needing
+        their own range, perfect satisfaction for every one isn't always
+        mathematically possible -- this gets as close as it can, treating
+        over-the-max violations as the priority to fix (since letting one
+        formation run over unfairly squeezes everyone else's share)."""
+        if not script or not down_plays:
+            return script
+        form_counts = Counter(str(p['form']).strip() for p in down_plays
+                              if str(p['form']).strip() not in ('', 'nan', 'None'))
+        total_real = sum(form_counts.values())
+        if total_real == 0:
+            return script
+        targets = {}
+        for form, cnt in form_counts.items():
+            if cnt < min_real_snaps:
+                continue
+            share = cnt / total_real
+            targets[form] = (max(0.0, share - tolerance), min(1.0, share + tolerance))
+        all_forms_in_pool = set(str(p['form']).strip() for p in down_plays
+                                if str(p['form']).strip() not in ('', 'nan', 'None'))
+        script = list(script)
+
+        def _try_swap(donor_form, prefer_recipient_ranked):
+            for recipient_form, _ in prefer_recipient_ranked:
+                if recipient_form == donor_form:
+                    continue
+                for _rp_pref in (True, False):
+                    for i, s in enumerate(script):
+                        if s['form'] != donor_form:
+                            continue
+                        cands = [p for p in down_plays if p['form'] == recipient_form
+                                 and (p['rp'] == s['rp'] if _rp_pref else True)]
+                        if cands:
+                            script[i] = cands[0]
+                            return True
+            return False
+
+        # Phase 1: fix every formation currently OVER its allowed max --
+        # the hard priority, since it's unfairly crowding out others.
+        for _pass_num in range(40):
+            script_form_counts = Counter(s['form'] for s in script)
+            over = [(f, script_form_counts.get(f, 0) / total_reps - hi)
+                    for f, (lo, hi) in targets.items() if script_form_counts.get(f, 0) / total_reps > hi]
+            if not over:
+                break
+            over.sort(key=lambda x: -x[1])
+            donor_form = over[0][0]
+            recipients_ranked = sorted(
+                ((f, targets[f][0] - script_form_counts.get(f, 0) / total_reps) if f in targets
+                 else (f, -1.0) for f in all_forms_in_pool if f != donor_form),
+                key=lambda x: -x[1])
+            if not _try_swap(donor_form, recipients_ranked):
+                break
+
+        # Phase 2: best-effort top-up of formations still UNDER their min,
+        # pulling from whichever formation currently has the most slack.
+        for _pass_num in range(40):
+            script_form_counts = Counter(s['form'] for s in script)
+            under = [(f, lo - script_form_counts.get(f, 0) / total_reps)
+                     for f, (lo, hi) in targets.items() if script_form_counts.get(f, 0) / total_reps < lo]
+            if not under:
+                break
+            under.sort(key=lambda x: -x[1])
+            recipient_form = under[0][0]
+            donors_ranked = sorted(
+                ((f, script_form_counts.get(f, 0) / total_reps - (targets[f][1] if f in targets else 0.0))
+                 for f in all_forms_in_pool if f != recipient_form and script_form_counts.get(f, 0) > 0),
+                key=lambda x: -x[1])
+            swapped = False
+            for donor_form, _ in donors_ranked:
+                for _rp_pref in (True, False):
+                    for i, s in enumerate(script):
+                        if s['form'] != donor_form:
+                            continue
+                        cands = [p for p in down_plays if p['form'] == recipient_form
+                                 and (p['rp'] == s['rp'] if _rp_pref else True)]
+                        if cands:
+                            script[i] = cands[0]
+                            swapped = True
+                            break
+                    if swapped:
+                        break
+                if swapped:
+                    break
+            if not swapped:
+                break
+        return script
+
     def _build_script(down_plays, total_reps):
         """Real plays, run/pass split matched to their actual tendency,
         proportionally weighted toward their most-called plays."""
@@ -5354,6 +5445,10 @@ def build_excel(plays, opp, week, date):
                 script.append(run_script[i_r]); i_r += 1
             else:
                 script.append(pass_script[i_p]); i_p += 1
+        script = _limit_consecutive_formations(script, max_consecutive=2)
+        script = _limit_consecutive_attr(script, 'concept', max_consecutive=1)
+        script = _ensure_top_formations(script, down_plays, top_n=5)
+        script = _enforce_formation_quotas(script, down_plays, total_reps)
         script = _limit_consecutive_formations(script, max_consecutive=2)
         script = _limit_consecutive_attr(script, 'concept', max_consecutive=1)
         script = _ensure_top_formations(script, down_plays, top_n=5)
