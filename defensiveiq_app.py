@@ -6358,6 +6358,7 @@ if uploaded and st.button("🛡️ RUN ANALYSIS"):
             st.stop()
 
         plays = load_plays(df)
+        _plays_before_filters = len(plays)
         if opp_team_filter is not None and len(opp_team_filter) > 0:
             before_n = len(plays)
             plays = [p for p in plays if p.get('opp_team', '') in opp_team_filter]
@@ -6373,9 +6374,13 @@ if uploaded and st.button("🛡️ RUN ANALYSIS"):
             except ValueError:
                 st.warning(f"\"{score_filter}\" isn't a number — ignoring the score filter for this run.")
         if len(plays) == 0:
-            st.error("No Run/Pass plays found in this file.")
-            st.info("Common causes: PLAY TYPE uses different words than 'Run'/'Pass', or YARD LN is blank. "
-                    "Open the column mapping above to see what we detected.")
+            if _plays_before_filters == 0:
+                st.error("No Run/Pass plays found in this file.")
+                st.info("Common causes: PLAY TYPE uses different words than 'Run'/'Pass', or YARD LN is blank. "
+                        "Open the column mapping above to see what we detected.")
+            else:
+                st.error("Your filters excluded every play — nothing left to analyze.")
+                st.info("Try selecting more games in the opponent filter, or raising/clearing the score filter, then run again.")
         else:
                 opp_name = opp or "Opponent"
                 prog = st.progress(0, "Devouring the film...")
