@@ -5299,6 +5299,39 @@ def build_excel(plays, opp, week, date):
         around the generalized attribute limiter for clarity)."""
         return _limit_consecutive_attr(script, 'form', max_consecutive)
 
+    def _ensure_top_formations(script, down_plays, top_n=5):
+        """Make sure the top N most-used formations in this down pool show
+        up at least once in the script, if the data makes it possible --
+        swapping in a real rep from a missing top formation in place of a
+        rep from a formation that already appears more than once, so no
+        formation's only appearance gets erased in the process."""
+        if not script or not down_plays:
+            return script
+        form_counts = Counter(str(p['form']).strip() for p in down_plays
+                              if str(p['form']).strip() not in ('', 'nan', 'None'))
+        top_forms = [f for f, _ in form_counts.most_common(top_n)]
+        script = list(script)
+        script_form_counts = Counter(s['form'] for s in script)
+        for form in top_forms:
+            if script_form_counts.get(form, 0) > 0:
+                continue
+            for rp_type in ('Run', 'Pass'):
+                candidates = [p for p in down_plays if p['form'] == form and p['rp'] == rp_type]
+                if not candidates:
+                    continue
+                swapped = False
+                for i, s in enumerate(script):
+                    if s['rp'] == rp_type and script_form_counts.get(s['form'], 0) > 1:
+                        old_form = s['form']
+                        script[i] = candidates[0]
+                        script_form_counts[old_form] -= 1
+                        script_form_counts[form] = script_form_counts.get(form, 0) + 1
+                        swapped = True
+                        break
+                if swapped:
+                    break
+        return script
+
     def _build_script(down_plays, total_reps):
         """Real plays, run/pass split matched to their actual tendency,
         proportionally weighted toward their most-called plays."""
@@ -5321,6 +5354,9 @@ def build_excel(plays, opp, week, date):
                 script.append(run_script[i_r]); i_r += 1
             else:
                 script.append(pass_script[i_p]); i_p += 1
+        script = _limit_consecutive_formations(script, max_consecutive=2)
+        script = _limit_consecutive_attr(script, 'concept', max_consecutive=1)
+        script = _ensure_top_formations(script, down_plays, top_n=5)
         script = _limit_consecutive_formations(script, max_consecutive=2)
         script = _limit_consecutive_attr(script, 'concept', max_consecutive=1)
         return script
