@@ -4874,10 +4874,15 @@ def build_excel(plays, opp, week, date):
 
     # ── Tab: Game Comparison (only when multiple games are combined) ──
     _game_groups = {}
+    _game_casing_counts = {}
     for p in plays:
         ot = p.get('opp_team', '').strip()
         if not ot: continue
-        _game_groups.setdefault(ot, []).append(p)
+        _norm = ot.upper()
+        _game_casing_counts.setdefault(_norm, Counter())[ot] += 1
+        _game_groups.setdefault(_norm, []).append(p)
+    _game_display_names = {norm: counter.most_common(1)[0][0] for norm, counter in _game_casing_counts.items()}
+    _game_groups = {_game_display_names[norm]: sp for norm, sp in _game_groups.items()}
     _game_comparison_created = len(_game_groups) > 1
     if _game_comparison_created:
         ws23 = wb2.create_sheet("22c. Game Comparison")
@@ -6319,7 +6324,13 @@ if uploaded is not None:
         uploaded.seek(0)
         _opp_team_col = next((c for c in ['OPP TEAM', 'OPPONENT TEAM', 'OPP', 'OPPTEAM'] if c in _peek_df.columns), None)
         if _opp_team_col:
-            _teams = sorted(set(str(t).strip() for t in _peek_df[_opp_team_col].dropna().tolist() if str(t).strip()))
+            _team_casing_counts = {}
+            for t in _peek_df[_opp_team_col].dropna().tolist():
+                t_str = str(t).strip()
+                if not t_str: continue
+                _norm = t_str.upper()
+                _team_casing_counts.setdefault(_norm, Counter())[t_str] += 1
+            _teams = sorted(counter.most_common(1)[0][0] for counter in _team_casing_counts.values())
             if len(_teams) > 1:
                 opp_team_filter = st.multiselect("Filter to specific opponents/games (optional)", _teams, default=_teams,
                                                   help="Uncheck any games you want to leave out of the analysis.")
@@ -6360,8 +6371,9 @@ if uploaded and st.button("🛡️ RUN ANALYSIS"):
         plays = load_plays(df)
         _plays_before_filters = len(plays)
         if opp_team_filter is not None and len(opp_team_filter) > 0:
+            _selected_norms = set(t.upper() for t in opp_team_filter)
             before_n = len(plays)
-            plays = [p for p in plays if p.get('opp_team', '') in opp_team_filter]
+            plays = [p for p in plays if p.get('opp_team', '').upper() in _selected_norms]
             if len(opp_team_filter) < len(_teams):
                 st.info(f"Filtered to {', '.join(opp_team_filter)}: {len(plays)} of {before_n} plays included.")
         elif opp_team_filter is not None and len(opp_team_filter) == 0:
