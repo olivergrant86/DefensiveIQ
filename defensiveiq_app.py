@@ -6364,6 +6364,9 @@ if uploaded and st.button("🛡️ RUN ANALYSIS"):
             plays = [p for p in plays if p.get('opp_team', '') in opp_team_filter]
             if len(opp_team_filter) < len(_teams):
                 st.info(f"Filtered to {', '.join(opp_team_filter)}: {len(plays)} of {before_n} plays included.")
+        elif opp_team_filter is not None and len(opp_team_filter) == 0:
+            st.warning("No opponents were selected in the filter, so all games are included instead. "
+                       "Check a box above if you meant to narrow it down.")
         if score_filter and score_filter.strip():
             try:
                 max_score = float(score_filter.strip())
