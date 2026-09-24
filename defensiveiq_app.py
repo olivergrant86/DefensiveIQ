@@ -4872,6 +4872,290 @@ def build_excel(plays, opp, week, date):
     ws22.freeze_panes = "A4"
     print_friendly(ws22, repeat_rows="1:3")
 
+    # ── Tab: Master Call Sheet (replica of coach's manual sheet) ──
+    ws_mcs = wb2.create_sheet("24c. Master Call Sheet")
+    ws_mcs.sheet_properties.tabColor = "D2011A"; ws_mcs.sheet_view.showGridLines = False
+    _mcs_widths = [15, 15, 15] + [13] * 6 + [11] * 4 + [9] * 12
+    widths(ws_mcs, _mcs_widths)
+    NC_MCS = len(_mcs_widths)
+    ws_mcs.page_setup.orientation = "landscape"
+    ws_mcs.page_setup.fitToPage = True; ws_mcs.page_setup.fitToWidth = 1; ws_mcs.page_setup.fitToHeight = 0
+    ws_mcs.page_margins.left = 0.2; ws_mcs.page_margins.right = 0.2
+    ws_mcs.page_margins.top = 0.2; ws_mcs.page_margins.bottom = 0.2
+
+    def _mcs_cell(mcs_r, c, val, sz=9, bold=False, fc="FF000000", bg=None, h="left", wrap=True, italic=False):
+        cell = ws_mcs.cell(row=mcs_r, column=c, value=val)
+        cell.font = Font(name=FN, bold=bold, size=sz, color=fc, italic=italic)
+        if bg: cell.fill = fil(bg)
+        cell.alignment = Alignment(horizontal=h, vertical="center", wrap_text=wrap)
+        return cell
+
+    def _mcs_banner(mcs_r, c1, c2, text, bg=CB, fc=CW, sz=10, ht=18):
+        ws_mcs.merge_cells(start_row=mcs_r, start_column=c1, end_row=mcs_r, end_column=c2)
+        _mcs_cell(mcs_r, c1, text, sz=sz, bold=True, fc=fc, bg=bg, h="center")
+        ws_mcs.row_dimensions[mcs_r].height = ht
+
+    # Header
+    ws_mcs.merge_cells(start_row=1, start_column=1, end_row=1, end_column=9)
+    _mcs_cell(1, 1, f"{(opp or 'OPPONENT').upper()}   {date or ''}", sz=18, bold=True, fc="FFD2011A", h="left")
+    ws_mcs.merge_cells(start_row=1, start_column=10, end_row=1, end_column=NC_MCS)
+    _mcs_cell(1, 10, "ALL TENDENCIES", sz=18, bold=True, fc=CW, bg=CB, h="center")
+    ws_mcs.row_dimensions[1].height = 30
+
+    # ── LEFT COLUMN (cols 1-3): static scheme content ──
+    mcs_r = 2
+    _mcs_banner(mcs_r, 1, 3, "BASE RULE SHEET", bg=CB); mcs_r += 1
+    for line in ["To - TE, Stutt, Multiple Receivers, Field Double TE",
+                 "*Slide LBs to FIB 3x1",
+                 "*Walk Will and 'BANK' when needed (if crossed by #)"]:
+        ws_mcs.merge_cells(start_row=mcs_r, start_column=1, end_row=mcs_r, end_column=3)
+        _mcs_cell(mcs_r, 1, line, sz=8, italic=True); ws_mcs.row_dimensions[mcs_r].height = 22; mcs_r += 1
+    _mcs_banner(mcs_r, 1, 3, "PRESSURES (PASS)", bg="FF8B0000"); mcs_r += 1
+    for line in ["1. Saints - Black", "2. Texans - Black", "3. Jags - Black", "4. Jets - Green or Black"]:
+        ws_mcs.merge_cells(start_row=mcs_r, start_column=1, end_row=mcs_r, end_column=3)
+        _mcs_cell(mcs_r, 1, line, sz=9, bold=True); ws_mcs.row_dimensions[mcs_r].height = 16; mcs_r += 1
+    _mcs_banner(mcs_r, 1, 3, "RUN", bg=CDG); mcs_r += 1
+    for line in ["Stampede", "Loops", "ARROW to TE"]:
+        ws_mcs.merge_cells(start_row=mcs_r, start_column=1, end_row=mcs_r, end_column=3)
+        _mcs_cell(mcs_r, 1, line, sz=9); ws_mcs.row_dimensions[mcs_r].height = 16; mcs_r += 1
+    _mcs_banner(mcs_r, 1, 3, "COVER CHECKS", bg=CDG); mcs_r += 1
+    for line in ["2x2 and 2 back = Blue w/ Check", "3x1 = SKY coverage to SLEY",
+                 "= SINK coverage to SLEY", "EMPTY = Quarters"]:
+        ws_mcs.merge_cells(start_row=mcs_r, start_column=1, end_row=mcs_r, end_column=3)
+        _mcs_cell(mcs_r, 1, line, sz=9); ws_mcs.row_dimensions[mcs_r].height = 16; mcs_r += 1
+
+    _mcs_banner(mcs_r, 1, 3, "SET TENDENCIES", bg="FF8B0000"); mcs_r += 1
+    _mcs_open_p = [p for p in plays if p['open_close'] == 'OPEN']
+    _mcs_closed_p = [p for p in plays if p['open_close'] == 'CLOSED']
+    _mcs_open_run = pct(len([p for p in _mcs_open_p if p['rp'] == 'Run']), len(_mcs_open_p)) if _mcs_open_p else 0
+    _mcs_closed_run = pct(len([p for p in _mcs_closed_p if p['rp'] == 'Run']), len(_mcs_closed_p)) if _mcs_closed_p else 0
+    ws_mcs.merge_cells(start_row=mcs_r, start_column=1, end_row=mcs_r, end_column=3)
+    _mcs_cell(mcs_r, 1, f"OPEN Formations - {_mcs_open_run}% run", sz=9, bold=True, bg=CYB); ws_mcs.row_dimensions[mcs_r].height = 16; mcs_r += 1
+    ws_mcs.merge_cells(start_row=mcs_r, start_column=1, end_row=mcs_r, end_column=3)
+    _mcs_cell(mcs_r, 1, f"CLOSED Formations - {_mcs_closed_run}% run", sz=9, bold=True, bg=CYB); ws_mcs.row_dimensions[mcs_r].height = 16; mcs_r += 1
+
+    _mcs_banner(mcs_r, 1, 3, "BACKFIELD TENDENCIES", bg="FF8B0000"); mcs_r += 1
+    for _mcs_bd_label, _mcs_bd_val in [("Behind", "DEEP"), ("Even", "EVEN"), ("Up", "UP")]:
+        _mcs_bd_p = [p for p in plays if p['back_depth'] == _mcs_bd_val]
+        if not _mcs_bd_p: continue
+        _mcs_bd_run = pct(len([p for p in _mcs_bd_p if p['rp'] == 'Run']), len(_mcs_bd_p))
+        ws_mcs.merge_cells(start_row=mcs_r, start_column=1, end_row=mcs_r, end_column=3)
+        _mcs_cell(mcs_r, 1, f"{_mcs_bd_label} - {_mcs_bd_run}% RUN", sz=9, bold=True); ws_mcs.row_dimensions[mcs_r].height = 15; mcs_r += 1
+        _mcs_bd_top = top3_str(_mcs_bd_p, 'concept', 3)
+        ws_mcs.merge_cells(start_row=mcs_r, start_column=1, end_row=mcs_r, end_column=3)
+        _mcs_cell(mcs_r, 1, "  " + ", ".join(x for x in _mcs_bd_top if x != "\u2014"), sz=8, italic=True, fc=CDG)
+        ws_mcs.row_dimensions[mcs_r].height = 16; mcs_r += 1
+
+    mcs_r += 1
+    ws_mcs.merge_cells(start_row=mcs_r, start_column=1, end_row=mcs_r, end_column=1)
+    _mcs_cell(mcs_r, 1, "RUN", sz=9, bold=True, fc=CW, bg=CR, h="center")
+    ws_mcs.merge_cells(start_row=mcs_r, start_column=2, end_row=mcs_r, end_column=3)
+    _mcs_cell(mcs_r, 2, "PASS", sz=9, bold=True, fc=CW, bg=CBl, h="center")
+    ws_mcs.row_dimensions[mcs_r].height = 16; mcs_r += 1
+    ws_mcs.merge_cells(start_row=mcs_r, start_column=1, end_row=mcs_r, end_column=3)
+    _mcs_cell(mcs_r, 1, "Left Tackle #51 - Run/Pass Read Based on HAND", sz=8, bold=True, bg=CYB); ws_mcs.row_dimensions[mcs_r].height = 22; mcs_r += 2
+
+    _mcs_banner(mcs_r, 1, 3, "AUTOMATIC", bg="FFD4A017"); mcs_r += 1
+    ws_mcs.merge_cells(start_row=mcs_r, start_column=1, end_row=mcs_r, end_column=3)
+    _mcs_cell(mcs_r, 1, "Wing Twins GW - BUCK SWEEP Formation", sz=8, bold=True, bg=CYB); ws_mcs.row_dimensions[mcs_r].height = 16; mcs_r += 1
+    ws_mcs.merge_cells(start_row=mcs_r, start_column=1, end_row=mcs_r, end_column=3)
+    _mcs_cell(mcs_r, 1, "'ARROW' (7 tech penetrate C gap, DL slant to TE)", sz=8, italic=True); ws_mcs.row_dimensions[mcs_r].height = 22; mcs_r += 2
+
+    ws_mcs.merge_cells(start_row=mcs_r, start_column=1, end_row=mcs_r + 1, end_column=3)
+    _mcs_cell(mcs_r, 1, "WIN 1ST DOWN,\nGET OFF THE FIELD ON 3RD", sz=12, bold=True, fc="FFD2011A", h="center")
+    ws_mcs.row_dimensions[mcs_r].height = 20
+
+    # ── MIDDLE-LEFT (cols 4-9): Top 5 Formation Tendencies + Families ──
+    mcs_r2 = 2
+    _mcs_banner(mcs_r2, 4, 9, "TOP 5 FORMATION TENDENCIES", bg="FF8B0000"); mcs_r2 += 1
+    _mcs_form_groups = {}
+    for p in plays:
+        f = str(p['form']).strip()
+        if f in ('', 'nan', 'None'): continue
+        _mcs_form_groups.setdefault(f, []).append(p)
+    _mcs_top5 = sorted(_mcs_form_groups.items(), key=lambda kv: -len(kv[1]))[:5]
+    for mcs_fname, mcs_fsub in _mcs_top5:
+        mcs_f_run_n = len([p for p in mcs_fsub if p['rp'] == 'Run'])
+        mcs_f_run_pct = pct(mcs_f_run_n, len(mcs_fsub))
+        mcs_f_lean = "Run" if mcs_f_run_pct >= 50 else "Pass"
+        mcs_f_bg = "FF8B0000" if mcs_f_lean == "Run" else "FF1A5276"
+        ws_mcs.merge_cells(start_row=mcs_r2, start_column=4, end_row=mcs_r2, end_column=9)
+        _mcs_cell(mcs_r2, 4, f"{mcs_fname} ({len(mcs_fsub)}) {mcs_f_run_pct if mcs_f_lean=='Run' else 100-mcs_f_run_pct}% {mcs_f_lean}",
+                  sz=9, bold=True, fc=CW, bg=mcs_f_bg, h="center")
+        ws_mcs.row_dimensions[mcs_r2].height = 15; mcs_r2 += 1
+        ws_mcs.merge_cells(start_row=mcs_r2, start_column=4, end_row=mcs_r2, end_column=6)
+        _mcs_cell(mcs_r2, 4, "ST", sz=8, bold=True, fc=CW, bg=CDG, h="center")
+        ws_mcs.merge_cells(start_row=mcs_r2, start_column=7, end_row=mcs_r2, end_column=9)
+        _mcs_cell(mcs_r2, 7, "WK", sz=8, bold=True, fc=CW, bg=CDG, h="center")
+        ws_mcs.row_dimensions[mcs_r2].height = 13; mcs_r2 += 1
+        _mcs_st_sub = [p for p in mcs_fsub if p['strong_weak'] == 'ST']
+        _mcs_wk_sub = [p for p in mcs_fsub if p['strong_weak'] == 'WK']
+        _mcs_st_top = [x for x in top3_str(_mcs_st_sub, 'concept', 2) if x != "\u2014"]
+        _mcs_wk_top = [x for x in top3_str(_mcs_wk_sub, 'concept', 2) if x != "\u2014"]
+        _mcs_n_lines = max(1, len(_mcs_st_top), len(_mcs_wk_top))
+        for _mcs_li in range(_mcs_n_lines):
+            ws_mcs.merge_cells(start_row=mcs_r2, start_column=4, end_row=mcs_r2, end_column=6)
+            _mcs_cell(mcs_r2, 4, _mcs_st_top[_mcs_li] if _mcs_li < len(_mcs_st_top) else "", sz=8, fc="FF8B0000", h="center")
+            ws_mcs.merge_cells(start_row=mcs_r2, start_column=7, end_row=mcs_r2, end_column=9)
+            _mcs_cell(mcs_r2, 7, _mcs_wk_top[_mcs_li] if _mcs_li < len(_mcs_wk_top) else "", sz=8, fc="FF8B0000", h="center")
+            ws_mcs.row_dimensions[mcs_r2].height = 13; mcs_r2 += 1
+
+    mcs_r2 += 1
+    _mcs_banner(mcs_r2, 4, 9, "FORMATION FAMILIES", bg=CB); mcs_r2 += 1
+    _mcs_fam_groups = {}
+    for p in plays:
+        fam = str(p.get('form_family', '')).strip()
+        if fam in ('', 'nan', 'None'): continue
+        _mcs_fam_groups.setdefault(fam, []).append(p)
+    _mcs_fam_ranked = sorted(_mcs_fam_groups.items(), key=lambda kv: -len(kv[1]))
+    _mcs_fam_colors = {0: "FF8B0000", 1: CB, 2: CPu}
+    for _mcs_fi, (mcs_famname, mcs_famsub) in enumerate(_mcs_fam_ranked[:4]):
+        mcs_fam_run_pct = pct(len([p for p in mcs_famsub if p['rp'] == 'Run']), len(mcs_famsub))
+        _fam_bg = _mcs_fam_colors.get(_mcs_fi, CDG)
+        ws_mcs.merge_cells(start_row=mcs_r2, start_column=4, end_row=mcs_r2, end_column=9)
+        _mcs_cell(mcs_r2, 4, f"{mcs_famname} - {mcs_fam_run_pct}% Run", sz=9, bold=True, fc=CW, bg=_fam_bg, h="center")
+        ws_mcs.row_dimensions[mcs_r2].height = 15; mcs_r2 += 1
+        _fam_run = [p for p in mcs_famsub if p['rp'] == 'Run']; _fam_pass = [p for p in mcs_famsub if p['rp'] == 'Pass']
+        _fr_top = ", ".join(x for x in top3_str(_fam_run, 'concept', 3) if x != "\u2014")
+        _fp_top = ", ".join(x for x in top3_str(_fam_pass, 'concept', 3) if x != "\u2014")
+        ws_mcs.merge_cells(start_row=mcs_r2, start_column=4, end_row=mcs_r2, end_column=9)
+        _mcs_cell(mcs_r2, 4, _fr_top or "\u2014", sz=8, fc="FF8B0000", h="center"); ws_mcs.row_dimensions[mcs_r2].height = 14; mcs_r2 += 1
+        ws_mcs.merge_cells(start_row=mcs_r2, start_column=4, end_row=mcs_r2, end_column=9)
+        _mcs_cell(mcs_r2, 4, _fp_top or "\u2014", sz=8, fc="FF00008B", h="center"); ws_mcs.row_dimensions[mcs_r2].height = 14; mcs_r2 += 1
+
+    # ── MIDDLE-RIGHT (cols 10-13): static coverage/personnel key ──
+    mcs_r3 = 2
+    _mcs_banner(mcs_r3, 10, 13, "COVERAGE / PERSONNEL KEY", bg=CPu); mcs_r3 += 1
+    _mcs_key_lines = [
+        ("1 Man", ["1. Stampede", "2. Texans", "3. Jags", "4. Jets - Green or Black"]),
+        ("4 Man", ["Blue", "Green", "Black", "Sky", "Cloud"]),
+        ("Coverage", ["Slant", "Bullets", "QTRs", "Cut", "Banjo"]),
+        ("Personnel", ["Mike", "Mike X", "Will Loop", "Bandit", "Will Stall"]),
+        ("Loop Calls", ["Dawg", "Dawg Loop", "Bandit Loop", "Mike X", "Will Loop"]),
+    ]
+    for _mcs_label, _mcs_items in _mcs_key_lines:
+        ws_mcs.merge_cells(start_row=mcs_r3, start_column=10, end_row=mcs_r3, end_column=13)
+        _mcs_cell(mcs_r3, 10, _mcs_label, sz=8, bold=True, fc=CW, bg=CDG, h="center")
+        ws_mcs.row_dimensions[mcs_r3].height = 14; mcs_r3 += 1
+        for _mcs_item in _mcs_items:
+            ws_mcs.merge_cells(start_row=mcs_r3, start_column=10, end_row=mcs_r3, end_column=13)
+            _mcs_cell(mcs_r3, 10, _mcs_item, sz=8, h="center")
+            ws_mcs.row_dimensions[mcs_r3].height = 13; mcs_r3 += 1
+        mcs_r3 += 1
+
+    def _mcs_row_h(texts, col_chars=13, base=16, line_h=9):
+        max_lines = 1
+        for t in texts:
+            if not t: continue
+            max_lines = max(max_lines, -(-len(str(t)) // col_chars))
+        return base + (max_lines - 1) * line_h
+
+    # ── RIGHT COLUMN (cols 14-25): data-driven tables ──
+    mcs_r4 = 2
+    _mcs_banner(mcs_r4, 14, NC_MCS, "DOWN AND DISTANCE TENDENCIES", bg=CB); mcs_r4 += 1
+    for _mcs_c, _mcs_txt in zip(range(14, NC_MCS + 1),
+                        ["SITUATION", "Plays", "Run%", "Pass%", "#1 Run", "#2 Run", "#3 Run", "#1 Pass", "#2 Pass", "#3 Pass", "", ""]):
+        if not _mcs_txt: continue
+        _mcs_cell(mcs_r4, _mcs_c, _mcs_txt, sz=7, bold=True, fc=CW, bg=CTe, h="center")
+    ws_mcs.row_dimensions[mcs_r4].height = 20; mcs_r4 += 1
+    for _mcs_lbl, _mcs_fn in DD_SITS:
+        _mcs_sp = [p for p in plays if _mcs_fn(p)]
+        _mcs_sr = [p for p in _mcs_sp if p['rp'] == 'Run']; _mcs_spa = [p for p in _mcs_sp if p['rp'] == 'Pass']
+        _mcs_bg = CL if (mcs_r4 % 2 == 0) else CW
+        _mcs_cell(mcs_r4, 14, _mcs_lbl, sz=7, bold=True, fc=CW, bg=CTe)
+        _mcs_cell(mcs_r4, 15, len(_mcs_sp), sz=8, bold=True, bg=_mcs_bg, h="center")
+        _mcs_cell(mcs_r4, 16, f"{pct(len(_mcs_sr), len(_mcs_sp))}%" if _mcs_sp else "\u2014", sz=8, bold=True, fc="FF8B0000", bg=CRB, h="center")
+        _mcs_cell(mcs_r4, 17, f"{pct(len(_mcs_spa), len(_mcs_sp))}%" if _mcs_sp else "\u2014", sz=8, bold=True, fc="FF00008B", bg=CPB, h="center")
+        _mcs_t3rc = top3_str(_mcs_sr, 'concept'); _mcs_t3pc = top3_str(_mcs_spa, 'concept')
+        for _mcs_i, _mcs_cn in enumerate([18, 19, 20]): _mcs_cell(mcs_r4, _mcs_cn, _mcs_t3rc[_mcs_i], sz=7, bg=CRB, h="center")
+        for _mcs_i, _mcs_cn in enumerate([21, 22, 23]): _mcs_cell(mcs_r4, _mcs_cn, _mcs_t3pc[_mcs_i], sz=7, bg=CPB, h="center")
+        ws_mcs.row_dimensions[mcs_r4].height = _mcs_row_h(_mcs_t3rc + _mcs_t3pc); mcs_r4 += 1
+
+    mcs_r4 += 1
+    _mcs_banner(mcs_r4, 14, NC_MCS, "TOP 3 RUN & PASS PLAYS BY DOWN", bg=CTe); mcs_r4 += 1
+    for _mcs_c, _mcs_txt in zip(range(14, NC_MCS + 1),
+                        ["DOWN", "Snap", "Run%", "Pass%", "#1 Run", "#2 Run", "#3 Run", "#1 Pass", "#2 Pass", "#3 Pass", "", ""]):
+        if not _mcs_txt: continue
+        _mcs_cell(mcs_r4, _mcs_c, _mcs_txt, sz=7, bold=True, fc=CW, bg=CTe, h="center")
+    ws_mcs.row_dimensions[mcs_r4].height = 20; mcs_r4 += 1
+    for _mcs_dn_v, _mcs_dn_lbl in [(1, "1st Down"), (2, "2nd Down"), (3, "3rd Down"), (4, "4th Down")]:
+        _mcs_sp = [p for p in plays if p['dn'] == _mcs_dn_v]
+        _mcs_sr = [p for p in _mcs_sp if p['rp'] == 'Run']; _mcs_spa = [p for p in _mcs_sp if p['rp'] == 'Pass']
+        _mcs_bg = CL if (mcs_r4 % 2 == 0) else CW
+        _mcs_cell(mcs_r4, 14, _mcs_dn_lbl, sz=7, bold=True, fc=CW, bg=CTe)
+        _mcs_cell(mcs_r4, 15, len(_mcs_sp), sz=8, bold=True, bg=_mcs_bg, h="center")
+        _mcs_cell(mcs_r4, 16, f"{pct(len(_mcs_sr), len(_mcs_sp))}%" if _mcs_sp else "\u2014", sz=8, bold=True, fc="FF8B0000", bg=CRB, h="center")
+        _mcs_cell(mcs_r4, 17, f"{pct(len(_mcs_spa), len(_mcs_sp))}%" if _mcs_sp else "\u2014", sz=8, bold=True, fc="FF00008B", bg=CPB, h="center")
+        _mcs_t3rc = top3_str(_mcs_sr, 'concept'); _mcs_t3pc = top3_str(_mcs_spa, 'concept')
+        for _mcs_i, _mcs_cn in enumerate([18, 19, 20]): _mcs_cell(mcs_r4, _mcs_cn, _mcs_t3rc[_mcs_i], sz=7, bg=CRB, h="center")
+        for _mcs_i, _mcs_cn in enumerate([21, 22, 23]): _mcs_cell(mcs_r4, _mcs_cn, _mcs_t3pc[_mcs_i], sz=7, bg=CPB, h="center")
+        ws_mcs.row_dimensions[mcs_r4].height = _mcs_row_h(_mcs_t3rc + _mcs_t3pc); mcs_r4 += 1
+
+    mcs_r4 += 1
+    _mcs_banner(mcs_r4, 14, NC_MCS, "FIELD ZONE", bg=CPu); mcs_r4 += 1
+    for _mcs_c, _mcs_txt in zip(range(14, NC_MCS + 1), ["ZONE", "Run%", "Pass%", "Top Run", "Top Pass", "Formation", "", "", "", "", "", ""]):
+        if not _mcs_txt: continue
+        _mcs_cell(mcs_r4, _mcs_c, _mcs_txt, sz=7, bold=True, fc=CW, bg=CTe, h="center")
+    ws_mcs.row_dimensions[mcs_r4].height = 18; mcs_r4 += 1
+    for _mcs_zcode in ZONE_LIST:
+        _mcs_zp = [p for p in plays if p['zone'] == _mcs_zcode]
+        if not _mcs_zp: continue
+        _mcs_zr = [p for p in _mcs_zp if p['rp'] == 'Run']; _mcs_zpa = [p for p in _mcs_zp if p['rp'] == 'Pass']
+        _mcs_bg = CL if (mcs_r4 % 2 == 0) else CW
+        _mcs_cell(mcs_r4, 14, ZONE_NAMES[_mcs_zcode].split("  ")[0], sz=7, bold=True, fc=CW, bg=CTe)
+        _mcs_cell(mcs_r4, 15, f"{pct(len(_mcs_zr), len(_mcs_zp))}%", sz=8, bold=True, fc="FF8B0000", bg=CRB, h="center")
+        _mcs_cell(mcs_r4, 16, f"{pct(len(_mcs_zpa), len(_mcs_zp))}%", sz=8, bold=True, fc="FF00008B", bg=CPB, h="center")
+        _mcs_ztr = top3_str(_mcs_zr, 'concept', 1)[0]
+        _mcs_ztp = top3_str(_mcs_zpa, 'concept', 1)[0]
+        _mcs_ztf = top3_str(_mcs_zp, 'form', 1)[0]
+        _mcs_cell(mcs_r4, 17, _mcs_ztr, sz=7, bg=CRB, h="center")
+        _mcs_cell(mcs_r4, 18, _mcs_ztp, sz=7, bg=CPB, h="center")
+        _mcs_cell(mcs_r4, 19, _mcs_ztf, sz=7, bg="FFEDE7F6", h="center")
+        ws_mcs.row_dimensions[mcs_r4].height = _mcs_row_h([_mcs_ztr, _mcs_ztp, _mcs_ztf], col_chars=11, base=14); mcs_r4 += 1
+
+    mcs_r4 += 1
+    _mcs_banner(mcs_r4, 14, 18, "BIGGEST TENDENCIES", bg="FF8B0000")
+    _mcs_banner(mcs_r4, 19, NC_MCS, "HEAVY PASS SITUATIONS", bg="FF8B0000")
+    mcs_r4 += 1
+    _mcs_big = compute_biggest_tendencies(plays, top_n=8)
+    _mcs_heavy = compute_heavy_pass_situations(plays)
+    for _mcs_i in range(max(len(_mcs_big), len(_mcs_heavy))):
+        _mcs_bg = CL if (mcs_r4 % 2 == 0) else CW
+        ws_mcs.merge_cells(start_row=mcs_r4, start_column=14, end_row=mcs_r4, end_column=18)
+        _mcs_cell(mcs_r4, 14, _mcs_big[_mcs_i] if _mcs_i < len(_mcs_big) else "", sz=8, bold=True, bg=_mcs_bg, h="left")
+        ws_mcs.merge_cells(start_row=mcs_r4, start_column=19, end_row=mcs_r4, end_column=NC_MCS)
+        _mcs_cell(mcs_r4, 19, _mcs_heavy[_mcs_i] if _mcs_i < len(_mcs_heavy) else "", sz=8, bold=True, bg=_mcs_bg, h="left")
+        ws_mcs.row_dimensions[mcs_r4].height = 16; mcs_r4 += 1
+
+    mcs_r4 += 1
+    _mcs_banner(mcs_r4, 14, 18, "1ST PLAY AFTER", bg=CGr)
+    _mcs_banner(mcs_r4, 19, NC_MCS, "DRIVE STARTERS", bg=CB)
+    mcs_r4 += 1
+    for _mcs_code, _mcs_csp in action_ranked[:5]:
+        _mcs_crun = len([p for p in _mcs_csp if p['rp'] == 'Run'])
+        _mcs_bg = CL if (mcs_r4 % 2 == 0) else CW
+        ws_mcs.merge_cells(start_row=mcs_r4, start_column=14, end_row=mcs_r4, end_column=18)
+        _mcs_cell(mcs_r4, 14, f"{_mcs_code} - {pct(_mcs_crun, len(_mcs_csp))}% Run   [{len(_mcs_csp)}]", sz=8, bold=True, bg=_mcs_bg, h="left")
+        _mcs_top_c = ", ".join(x for x in top3_str(_mcs_csp, 'concept', 3) if x != "\u2014")
+        ws_mcs.merge_cells(start_row=mcs_r4, start_column=19, end_row=mcs_r4, end_column=NC_MCS)
+        _mcs_cell(mcs_r4, 19, _mcs_top_c or "\u2014", sz=8, bold=True, bg=_mcs_bg, h="left")
+        ws_mcs.row_dimensions[mcs_r4].height = 16; mcs_r4 += 1
+    if openers:
+        _mcs_op_run = len([p for p in openers if p['rp'] == 'Run'])
+        _mcs_bg = CL if (mcs_r4 % 2 == 0) else CW
+        ws_mcs.merge_cells(start_row=mcs_r4, start_column=14, end_row=mcs_r4, end_column=18)
+        _mcs_cell(mcs_r4, 14, f"Opening Play - {pct(_mcs_op_run, len(openers))}% Run   [{len(openers)}]", sz=8, bold=True, bg=_mcs_bg, h="left")
+        _mcs_op_top = ", ".join(x for x in top3_str(openers, 'concept', 3) if x != "\u2014")
+        ws_mcs.merge_cells(start_row=mcs_r4, start_column=19, end_row=mcs_r4, end_column=NC_MCS)
+        _mcs_cell(mcs_r4, 19, _mcs_op_top or "\u2014", sz=8, bold=True, bg=_mcs_bg, h="left")
+        ws_mcs.row_dimensions[mcs_r4].height = 16; mcs_r4 += 1
+
+    mcs_r4 += 1
+    ws_mcs.merge_cells(start_row=mcs_r4, start_column=14, end_row=mcs_r4 + 1, end_column=NC_MCS)
+    _mcs_cell(mcs_r4, 14, "DO YOUR JOB WELL  \u2014  SPOT THE BALL!", sz=16, bold=True, fc="FFD2011A", h="center")
+
+    print_friendly(ws_mcs, repeat_rows=None, one_page=True)
+
     # ── Tab: Game Comparison (only when multiple games are combined) ──
     _game_groups = {}
     _game_casing_counts = {}
@@ -6283,9 +6567,10 @@ def build_excel(plays, opp, week, date):
         ("1. Film Log", "21. Film Log"),
         ("20. Ball Carrier Tendencies", "22. Ball Carrier Tendencies"),
         ("22b. Combo Tendencies", "23. Combo Tendencies"),
+        ("24c. Master Call Sheet", "24. Master Call Sheet"),
     ]
     if _game_comparison_created:
-        _new_order.append(("22c. Game Comparison", "24. Game Comparison"))
+        _new_order.append(("22c. Game Comparison", "25. Game Comparison"))
     for old_name, new_name in _new_order:
         wb2[old_name].title = new_name
     wb2._sheets = [wb2[new_name] for _old_name, new_name in _new_order]
