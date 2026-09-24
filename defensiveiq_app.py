@@ -4878,8 +4878,9 @@ def build_excel(plays, opp, week, date):
     _mcs_widths = [15, 15, 15] + [13] * 6 + [11] * 4 + [9] * 12
     widths(ws_mcs, _mcs_widths)
     NC_MCS = len(_mcs_widths)
-    ws_mcs.page_setup.orientation = "landscape"
-    ws_mcs.page_setup.fitToPage = True; ws_mcs.page_setup.fitToWidth = 1; ws_mcs.page_setup.fitToHeight = 0
+    ws_mcs.page_setup.orientation = "portrait"
+    ws_mcs.page_setup.fitToPage = True; ws_mcs.page_setup.fitToWidth = 2; ws_mcs.page_setup.fitToHeight = 1
+    ws_mcs.col_breaks.append(Break(id=9))
     ws_mcs.page_margins.left = 0.2; ws_mcs.page_margins.right = 0.2
     ws_mcs.page_margins.top = 0.2; ws_mcs.page_margins.bottom = 0.2
 
@@ -4900,7 +4901,10 @@ def build_excel(plays, opp, week, date):
     _mcs_cell(1, 1, f"{(opp or 'OPPONENT').upper()}   {date or ''}", sz=18, bold=True, fc="FFD2011A", h="left")
     ws_mcs.merge_cells(start_row=1, start_column=10, end_row=1, end_column=NC_MCS)
     _mcs_cell(1, 10, "ALL TENDENCIES", sz=18, bold=True, fc=CW, bg=CB, h="center")
-    ws_mcs.row_dimensions[1].height = 30
+    ws_mcs.row_dimensions[1].height = 34
+    _mcs_header_logo = XLImage(_wordmark_stream())
+    _mcs_header_logo.width, _mcs_header_logo.height = 90, 37
+    ws_mcs.add_image(_mcs_header_logo, "H1")
 
     # ── LEFT COLUMN (cols 1-3): static scheme content ──
     mcs_r = 2
@@ -5154,7 +5158,12 @@ def build_excel(plays, opp, week, date):
     ws_mcs.merge_cells(start_row=mcs_r4, start_column=14, end_row=mcs_r4 + 1, end_column=NC_MCS)
     _mcs_cell(mcs_r4, 14, "DO YOUR JOB WELL  \u2014  SPOT THE BALL!", sz=16, bold=True, fc="FFD2011A", h="center")
 
-    print_friendly(ws_mcs, repeat_rows=None, one_page=True)
+    ws_mcs.page_margins.left = 0.2; ws_mcs.page_margins.right = 0.2
+    ws_mcs.page_margins.top = 0.3; ws_mcs.page_margins.bottom = 0.3
+    ws_mcs.page_margins.header = 0.1; ws_mcs.page_margins.footer = 0.1
+    ws_mcs.oddFooter.center.text = "Page &P of &N"
+    ws_mcs.oddFooter.center.size = 8
+    ws_mcs.oddFooter.center.color = "999999"
 
     # ── Tab: Game Comparison (only when multiple games are combined) ──
     _game_groups = {}
