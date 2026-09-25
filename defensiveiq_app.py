@@ -4918,11 +4918,13 @@ def build_excel(plays, opp, week, date):
     for line in ["1. Saints - Black", "2. Texans - Black", "3. Jags - Black", "4. Jets - Green or Black"]:
         ws_mcs.merge_cells(start_row=mcs_r, start_column=1, end_row=mcs_r, end_column=3)
         _mcs_cell(mcs_r, 1, line, sz=9, bold=True); ws_mcs.row_dimensions[mcs_r].height = 16; mcs_r += 1
-    _mcs_banner(mcs_r, 1, 3, "RUN", bg=CDG); mcs_r += 1
+    ws_mcs.merge_cells(start_row=mcs_r, start_column=1, end_row=mcs_r, end_column=3)
+    _mcs_cell(mcs_r, 1, "RUN", sz=10, bold=True, h="left"); ws_mcs.row_dimensions[mcs_r].height = 16; mcs_r += 1
     for line in ["Stampede", "Loops", "ARROW to TE"]:
         ws_mcs.merge_cells(start_row=mcs_r, start_column=1, end_row=mcs_r, end_column=3)
         _mcs_cell(mcs_r, 1, line, sz=9); ws_mcs.row_dimensions[mcs_r].height = 16; mcs_r += 1
-    _mcs_banner(mcs_r, 1, 3, "COVER CHECKS", bg=CDG); mcs_r += 1
+    ws_mcs.merge_cells(start_row=mcs_r, start_column=1, end_row=mcs_r, end_column=3)
+    _mcs_cell(mcs_r, 1, "Cover Checks", sz=10, bold=True, h="left"); ws_mcs.row_dimensions[mcs_r].height = 16; mcs_r += 1
     for line in ["2x2 and 2 back = Blue w/ Check", "3x1 = SKY coverage to SLEY",
                  "= SINK coverage to SLEY", "EMPTY = Quarters"]:
         ws_mcs.merge_cells(start_row=mcs_r, start_column=1, end_row=mcs_r, end_column=3)
@@ -4952,9 +4954,9 @@ def build_excel(plays, opp, week, date):
 
     mcs_r += 1
     ws_mcs.merge_cells(start_row=mcs_r, start_column=1, end_row=mcs_r, end_column=1)
-    _mcs_cell(mcs_r, 1, "RUN", sz=9, bold=True, fc=CW, bg=CR, h="center")
+    _mcs_cell(mcs_r, 1, "RUN", sz=9, bold=True, fc="FF000000", bg="FFD4A017", h="center")
     ws_mcs.merge_cells(start_row=mcs_r, start_column=2, end_row=mcs_r, end_column=3)
-    _mcs_cell(mcs_r, 2, "PASS", sz=9, bold=True, fc=CW, bg=CBl, h="center")
+    _mcs_cell(mcs_r, 2, "PASS", sz=9, bold=True, fc=CW, bg=CPu, h="center")
     ws_mcs.row_dimensions[mcs_r].height = 16; mcs_r += 1
     ws_mcs.merge_cells(start_row=mcs_r, start_column=1, end_row=mcs_r, end_column=3)
     _mcs_cell(mcs_r, 1, "Left Tackle #51 - Run/Pass Read Based on HAND", sz=8, bold=True, bg=CYB); ws_mcs.row_dimensions[mcs_r].height = 22; mcs_r += 2
@@ -4978,11 +4980,12 @@ def build_excel(plays, opp, week, date):
         if f in ('', 'nan', 'None'): continue
         _mcs_form_groups.setdefault(f, []).append(p)
     _mcs_top5 = sorted(_mcs_form_groups.items(), key=lambda kv: -len(kv[1]))[:5]
-    for mcs_fname, mcs_fsub in _mcs_top5:
+    _mcs_top5_palette = ["FF8B0000", "FF8B0000", "FF1A5276", "FF5DADE2", "FF1A5276"]
+    for mcs_fi5, (mcs_fname, mcs_fsub) in enumerate(_mcs_top5):
         mcs_f_run_n = len([p for p in mcs_fsub if p['rp'] == 'Run'])
         mcs_f_run_pct = pct(mcs_f_run_n, len(mcs_fsub))
         mcs_f_lean = "Run" if mcs_f_run_pct >= 50 else "Pass"
-        mcs_f_bg = "FF8B0000" if mcs_f_lean == "Run" else "FF1A5276"
+        mcs_f_bg = _mcs_top5_palette[mcs_fi5 % len(_mcs_top5_palette)]
         ws_mcs.merge_cells(start_row=mcs_r2, start_column=4, end_row=mcs_r2, end_column=9)
         _mcs_cell(mcs_r2, 4, f"{mcs_fname} ({len(mcs_fsub)}) {mcs_f_run_pct if mcs_f_lean=='Run' else 100-mcs_f_run_pct}% {mcs_f_lean}",
                   sz=9, bold=True, fc=CW, bg=mcs_f_bg, h="center")
@@ -5105,16 +5108,16 @@ def build_excel(plays, opp, week, date):
         _mcs_zp = [p for p in plays if p['zone'] == _mcs_zcode]
         if not _mcs_zp: continue
         _mcs_zr = [p for p in _mcs_zp if p['rp'] == 'Run']; _mcs_zpa = [p for p in _mcs_zp if p['rp'] == 'Pass']
-        _mcs_bg = CL if (mcs_r4 % 2 == 0) else CW
+        _mcs_zbg = ZONE_BG[_mcs_zcode]
         _mcs_cell(mcs_r4, 14, ZONE_NAMES[_mcs_zcode].split("  ")[0], sz=7, bold=True, fc=CW, bg=CTe)
-        _mcs_cell(mcs_r4, 15, f"{pct(len(_mcs_zr), len(_mcs_zp))}%", sz=8, bold=True, fc="FF8B0000", bg=CRB, h="center")
-        _mcs_cell(mcs_r4, 16, f"{pct(len(_mcs_zpa), len(_mcs_zp))}%", sz=8, bold=True, fc="FF00008B", bg=CPB, h="center")
+        _mcs_cell(mcs_r4, 15, f"{pct(len(_mcs_zr), len(_mcs_zp))}%", sz=8, bold=True, fc="FF8B0000", bg=_mcs_zbg, h="center")
+        _mcs_cell(mcs_r4, 16, f"{pct(len(_mcs_zpa), len(_mcs_zp))}%", sz=8, bold=True, fc="FF00008B", bg=_mcs_zbg, h="center")
         _mcs_ztr = top3_str(_mcs_zr, 'concept', 1)[0]
         _mcs_ztp = top3_str(_mcs_zpa, 'concept', 1)[0]
         _mcs_ztf = top3_str(_mcs_zp, 'form', 1)[0]
-        _mcs_cell(mcs_r4, 17, _mcs_ztr, sz=7, bg=CRB, h="center")
-        _mcs_cell(mcs_r4, 18, _mcs_ztp, sz=7, bg=CPB, h="center")
-        _mcs_cell(mcs_r4, 19, _mcs_ztf, sz=7, bg="FFEDE7F6", h="center")
+        _mcs_cell(mcs_r4, 17, _mcs_ztr, sz=7, bg=_mcs_zbg, h="center")
+        _mcs_cell(mcs_r4, 18, _mcs_ztp, sz=7, bg=_mcs_zbg, h="center")
+        _mcs_cell(mcs_r4, 19, _mcs_ztf, sz=7, bg=_mcs_zbg, h="center")
         ws_mcs.row_dimensions[mcs_r4].height = _mcs_row_h([_mcs_ztr, _mcs_ztp, _mcs_ztf], col_chars=11, base=14); mcs_r4 += 1
 
     mcs_r4 += 1
